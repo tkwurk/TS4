@@ -193,3 +193,86 @@
   color: var(--text);
   font-weight: 600;
 }
+
+.ui-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.ui-form-row .ui-field {
+  margin-bottom: 0;
+}
+
+.ui-panel textarea {
+  font: inherit;
+  font-size: 15px;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  resize: vertical;
+}
+
+.ui-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.6rem;
+  margin: 0.75rem 0;
+}
+
+.ui-stat {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.ui-stat__label {
+  font-size: 0.75rem;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ui-stat__value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-stat--ok .ui-stat__value {
+  color: #16a34a;
+}
+
+.ui-stat--bad .ui-stat__value {
+  color: #ef4444;
+}
+
+.ui-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.25rem 0 0.9rem;
+}
+
+.ui-subtab {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.ui-subtab--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}

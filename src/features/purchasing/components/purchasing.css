@@ -1,0 +1,55 @@
+.purch {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.purch__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.purch__cart {
+  flex: 0 0 18rem;
+  position: sticky;
+  top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.purch__cart h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-h);
+}
+
+.purch__line .name {
+  white-space: normal;
+}
+
+.purch__expiry {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.4rem;
+}
+
+.purch-pay h4 {
+  margin: 0.75rem 0 0.5rem;
+  color: var(--text-h);
+}
+
+@media (max-width: 900px) {
+  .purch {
+    flex-direction: column;
+  }
+  .purch__cart {
+    position: static;
+    width: 100%;
+    flex: 0 0 auto;
+  }
+}

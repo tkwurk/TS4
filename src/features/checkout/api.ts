@@ -52,15 +52,32 @@ export function submitCheckout(
  * can distinguish "none configured" from "could not load".
  */
 export async function fetchPaymentMethods(auth: AuthContext): Promise<PaymentMethod[] | null> {
+  const list = await fetchAllPaymentMethods(auth)
+  return list ? list.filter(isSellingMethod) : null
+}
+
+/** Raw active methods from the sheet (all modules). */
+export async function fetchAllPaymentMethods(auth: AuthContext): Promise<PaymentMethod[] | null> {
   const res = await rpc<unknown>('getPaymentMethodsSecure', [{ _authContext: auth }])
   if (!res.success) return null
   const d = res.data
-  let list: PaymentMethod[] = []
-  if (Array.isArray(d)) list = d as PaymentMethod[]
-  else if (d && typeof d === 'object' && Array.isArray((d as { data?: unknown }).data)) {
-    list = (d as { data: PaymentMethod[] }).data
+  if (Array.isArray(d)) return d as PaymentMethod[]
+  if (d && typeof d === 'object' && Array.isArray((d as { data?: unknown }).data)) {
+    return (d as { data: PaymentMethod[] }).data
   }
-  return list.filter(isSellingMethod)
+  return []
+}
+
+/** Methods enabled for a given module (empty Module column = all modules), like _getCachedPaymentMethodsForModule. */
+export async function fetchPaymentMethodsForModule(auth: AuthContext, module: string): Promise<PaymentMethod[]> {
+  const list = (await fetchAllPaymentMethods(auth)) ?? []
+  const want = module.toLowerCase()
+  return list.filter((m) => {
+    const key = (m.name || '').trim().toLowerCase()
+    if (!key || key === 'partial' || key === 'split') return false
+    const mod = (m.module || '').trim()
+    return !mod || mod.split(',').some((s) => s.trim().toLowerCase() === want)
+  })
 }
 
 /**

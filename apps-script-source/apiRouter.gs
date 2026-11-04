@@ -125,6 +125,29 @@ var RPC_ALLOWED = {
   authorizeCashDrawerOpenSecure: 1, logCashDrawerOpenSecure: 1,
   // kitchen alerts shown on the ordering screen
   getRecookAlertsSecure: 1,
+  // kitchen tab
+  getCookingProductsSecure: 1, submitCookingBatchSecure: 1, getCookRequestsSecure: 1,
+  updateCookRequestStatusSecure: 1, getCookingHistorySecure: 1, getCookingTodayReportSecure: 1,
+  // purchasing / receive / local
+  getOrderedPurchases: 1, updateReceiveQuantitySecure: 1, getExpenseAccounts: 1,
+  // consumption
+  getDailyClosingBundleSecure: 1, recordInventoryConsumptionSecure: 1,
+  // deposits
+  recordDepositSecure: 1, getDepositAccounts: 1, getDepositHistory: 1,
+  // investments
+  getInvestmentAccounts: 1, getInvestmentTransactions: 1,
+  // reports
+  getPnLBundleSecure: 1, getOrderLinesByDate: 1, getSalesAnalyticsSecure: 1,
+  // attendance
+  getEmployeeList: 1, recordMorningAttendance: 1, recordEveningAttendance: 1,
+  getAttendanceForDate: 1, getAttendanceSummary: 1,
+  // checklist
+  getChecklistDefinitions: 1, getChecklistFillBundle: 1, submitChecklistResponses: 1,
+  getPendingReviewQueue: 1, reviewChecklistShift: 1,
+  // admin orders
+  getOrdersForAdminSecure: 1, bulkUpdateOrdersSecure: 1, deleteOrderDataSecure: 1, getOutletsForAdminSecure: 1,
+  // stock
+  getStockTotalsSecure: 1,
   // purchases / inventory
   recordPurchaseSecure: 1, recordInventoryConsumptionSecure: 1,
   // reports

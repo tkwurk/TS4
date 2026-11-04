@@ -1,8 +1,16 @@
 import { useMemo, useState } from 'react'
 import { useAuth, LoginPanel } from '@/features/auth'
 import { CheckoutPanel } from '@/features/checkout'
-import { OrdersPanel } from '@/features/orders'
-import { ReportsPanel } from '@/features/reports'
+import { AdminOrdersPanel } from '@/features/adminOrders'
+import { PnlPanel, SalesReportPanel, UsagePanel } from '@/features/reports'
+import { KitchenPanel } from '@/features/kitchen'
+import { PurchasingPanel } from '@/features/purchasing'
+import { StockPanel } from '@/features/stock'
+import { ConsumptionPanel } from '@/features/consumption'
+import { DepositsPanel } from '@/features/deposits'
+import { InvestmentsPanel } from '@/features/investments'
+import { AttendancePanel } from '@/features/attendance'
+import { ChecklistPanel } from '@/features/checklist'
 import { ComingSoon, visibleNavItems } from '@/features/navigation'
 import { Button, Sidebar } from '@/components/ui'
 import { useI18n } from '@/i18n'
@@ -59,9 +67,33 @@ function App() {
       case 'orders':
         return <CheckoutPanel session={session} />
       case 'adminOrders':
-        return <OrdersPanel auth={auth} />
+        return <AdminOrdersPanel auth={auth} />
       case 'monthlySalesReport':
-        return <ReportsPanel auth={auth} />
+        return <SalesReportPanel auth={auth} />
+      case 'kitchenCooking':
+        return <KitchenPanel auth={auth} />
+      case 'purchasing':
+        return <PurchasingPanel auth={auth} mode="normal" />
+      case 'purchasingReceive':
+        return <PurchasingPanel auth={auth} mode="receive" />
+      case 'purchasingLocal':
+        return <PurchasingPanel auth={auth} mode="local" />
+      case 'stockReport':
+        return <StockPanel auth={auth} />
+      case 'inventoryConsumption':
+        return <ConsumptionPanel auth={auth} />
+      case 'deposits':
+        return <DepositsPanel auth={auth} />
+      case 'investments':
+        return <InvestmentsPanel auth={auth} />
+      case 'profitLoss':
+        return <PnlPanel auth={auth} />
+      case 'usageReport':
+        return <UsagePanel auth={auth} />
+      case 'attendance':
+        return <AttendancePanel auth={auth} />
+      case 'checklist':
+        return <ChecklistPanel auth={auth} />
       default:
         return <ComingSoon title={current ? t(current.labelKey) : ''} />
     }
