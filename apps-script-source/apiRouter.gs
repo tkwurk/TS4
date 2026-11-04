@@ -129,7 +129,7 @@ var RPC_ALLOWED = {
   getCookingProductsSecure: 1, submitCookingBatchSecure: 1, getCookRequestsSecure: 1,
   updateCookRequestStatusSecure: 1, getCookingHistorySecure: 1, getCookingTodayReportSecure: 1,
   // purchasing / receive / local
-  getOrderedPurchases: 1, updateReceiveQuantitySecure: 1, getExpenseAccounts: 1,
+  getProductsSecure: 1, getOrderedPurchases: 1, updateReceiveQuantitySecure: 1, getExpenseAccounts: 1,
   // consumption
   getDailyClosingBundleSecure: 1, recordInventoryConsumptionSecure: 1,
   // deposits

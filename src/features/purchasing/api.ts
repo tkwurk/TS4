@@ -60,18 +60,18 @@ function normalize(p: Record<string, unknown>): BuyProduct {
 }
 
 /** All products (all types), normalized. The screens filter by TYPE/MODE/outlet client-side like the original. */
-export async function fetchAllProducts(auth: AuthContext): Promise<BuyProduct[]> {
+export async function fetchAllProducts(auth: AuthContext): Promise<{ products: BuyProduct[]; error: string | null }> {
   const res = await rpc<unknown>('getProductsSecure', [{ type: 'ALL_TYPES', userOutlet: auth.outlet, _authContext: auth }])
-  if (!res.success) return []
+  if (!res.success) return { products: [], error: res.error ?? 'Request failed' }
   let raw: unknown = res.data
   if (typeof raw === 'string') {
     try {
       raw = JSON.parse(raw)
     } catch {
-      return []
+      return { products: [], error: 'Invalid product data' }
     }
   }
-  return Array.isArray(raw) ? (raw as Record<string, unknown>[]).map(normalize) : []
+  return { products: Array.isArray(raw) ? (raw as Record<string, unknown>[]).map(normalize) : [], error: null }
 }
 
 export function outletMatches(productOutlet: string | undefined, outlet: string): boolean {

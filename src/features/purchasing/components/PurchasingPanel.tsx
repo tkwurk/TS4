@@ -74,9 +74,11 @@ function BuyPanel({
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [all, accs] = await Promise.all([fetchAllProducts(auth), fetchExpenseAccounts()])
+    setMsg(null)
+    const [allRes, accs] = await Promise.all([fetchAllProducts(auth), fetchExpenseAccounts()])
     setLoading(false)
-    const buy = all.filter((p) => {
+    if (allRes.error) setMsg({ tone: 'error', text: allRes.error })
+    const buy = allRes.products.filter((p) => {
       if (!isActive(p) || str(p.TYPE) !== 'Buy') return false
       const m = str(p.MODE).trim().toUpperCase()
       const modeOk = local ? m === 'L' || m === 'LO' : m !== 'LO'
