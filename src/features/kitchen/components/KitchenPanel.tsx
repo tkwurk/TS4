@@ -127,6 +127,17 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
     return () => clearInterval(id)
   }, [loadProducts, loadRequests])
 
+  // Auto-load the Today report / History when the tab opens or filters change (debounced for typing).
+  useEffect(() => {
+    if (tab !== 'today') return
+    loadReport()
+  }, [tab, loadReport])
+  useEffect(() => {
+    if (tab !== 'history') return
+    const id = setTimeout(loadHistory, 350)
+    return () => clearTimeout(id)
+  }, [tab, loadHistory])
+
   const tabs = [
     { id: 'cook' as const, label: `🍳 ${t('kitchen.cook')}` },
     { id: 'requests' as const, label: `🔔 ${t('kitchen.requests')} (${open.length})` },
@@ -259,8 +270,8 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
               <TextInput type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
             </Field>
             <div className="actions" style={{ alignSelf: 'end' }}>
-              <Button onClick={loadReport} disabled={loadingReport}>
-                {loadingReport ? t('common.loading') : t('kitchen.loadReport')}
+              <Button variant="ghost" onClick={loadReport} disabled={loadingReport} title={t('kitchen.loadReport')}>
+                {loadingReport ? t('common.loading') : '↻'}
               </Button>
             </div>
           </FormRow>
@@ -277,7 +288,7 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
           <DataTable
             rows={report as unknown as Record<string, unknown>[]}
             rowKey={(r) => String(r.productCode ?? r.name)}
-            empty={t('kitchen.noReport')}
+            empty={loadingReport ? t('common.loading') : t('kitchen.noReport')}
             columns={[
               { key: 'name', label: t('kitchen.product') },
               { key: 'leftoverFromYesterday', label: t('kitchen.leftover'), align: 'right', render: (r) => fmtNum(Number(r.leftoverFromYesterday) || 0) },
@@ -308,18 +319,31 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
               <TextInput type="date" value={hEnd} onChange={(e) => setHEnd(e.target.value)} />
             </Field>
             <Field label={t('kitchen.product')}>
-              <TextInput value={hProduct} onChange={(e) => setHProduct(e.target.value)} placeholder={t('common.all')} />
+              <TextInput
+                list="kitchen-history-products"
+                type="search"
+                value={hProduct}
+                onChange={(e) => setHProduct(e.target.value)}
+                placeholder={t('common.all')}
+              />
+              <datalist id="kitchen-history-products">
+                {products.map((p) => (
+                  <option key={p.productCode} value={p.name}>
+                    {p.productCode}
+                  </option>
+                ))}
+              </datalist>
             </Field>
             <div className="actions" style={{ alignSelf: 'end' }}>
-              <Button onClick={loadHistory} disabled={loadingHist}>
-                {loadingHist ? t('common.loading') : t('kitchen.loadHistory')}
+              <Button variant="ghost" onClick={loadHistory} disabled={loadingHist} title={t('kitchen.loadHistory')}>
+                {loadingHist ? t('common.loading') : '↻'}
               </Button>
             </div>
           </FormRow>
           <DataTable
             rows={history as unknown as Record<string, unknown>[]}
             rowKey={(r, i) => `${r.cookingId}-${i}`}
-            empty={t('kitchen.noHistory')}
+            empty={loadingHist ? t('common.loading') : t('kitchen.noHistory')}
             columns={[
               { key: 'startTime', label: t('kitchen.start'), render: (r) => (r.startTime ? new Date(String(r.startTime)).toLocaleString() : '') },
               { key: 'productName', label: t('kitchen.product') },
