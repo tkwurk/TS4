@@ -211,6 +211,8 @@ export const dict: Record<Lang, Record<string, string>> = {
     'kitchen.to': 'To',
     'kitchen.loadHistory': 'Load history',
     'kitchen.noHistory': 'No cooking history in this range.',
+    'kitchen.requestsClosed': 'Requests completed',
+    'kitchen.requestsStillOpen': 'Still below threshold',
 
     'purch.product': 'Product',
     'purch.supplier': 'Supplier',
@@ -679,6 +681,8 @@ export const dict: Record<Lang, Record<string, string>> = {
     'kitchen.to': 'Sampai',
     'kitchen.loadHistory': 'Muat riwayat',
     'kitchen.noHistory': 'Tidak ada riwayat masak di rentang ini.',
+    'kitchen.requestsClosed': 'Permintaan selesai',
+    'kitchen.requestsStillOpen': 'Masih di bawah ambang',
 
     'purch.product': 'Produk',
     'purch.supplier': 'Supplier',

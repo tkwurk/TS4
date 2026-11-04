@@ -55,11 +55,15 @@ export interface TodayReportItem {
 export const getCookingProducts = (auth: AuthContext) =>
   callSecure<{ items: CookingProduct[]; reportDate?: string }>('getCookingProductsSecure', {}, auth)
 
+export interface BatchRequestOutcome {
+  done?: string[]
+  stillOpen?: { productCode: string; remaining: number; threshold: number }[]
+}
 export const submitCookingBatch = (
   p: { startTime: string; endTime: string; notes?: string; lines: { productCode: string; qty: number }[] },
   auth: AuthContext,
 ) =>
-  callSecure<{ cookingId?: string; saved?: unknown[] }>(
+  callSecure<{ cookingId?: string; saved?: unknown[]; requests?: BatchRequestOutcome | null }>(
     'submitCookingBatchSecure',
     { ...p, clientRequestId: `cook-${Date.now()}`, deviceInfo: navigator.userAgent.slice(0, 80) },
     auth,

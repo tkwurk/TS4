@@ -63,7 +63,13 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
     const r = await submitCookingBatch({ startTime, endTime, notes, lines }, auth)
     setSubmitting(false)
     if (r.ok) {
-      setMsg({ tone: 'info', text: `${t('kitchen.saved')} — ${lines.length} ${t('kitchen.lines')}` })
+      const req = r.data?.requests
+      const nameOf = (code: string) => products.find((p) => p.productCode.toUpperCase() === code.toUpperCase())?.name ?? code
+      let text = `${t('kitchen.saved')} — ${lines.length} ${t('kitchen.lines')}`
+      if (req?.done?.length) text += ` · ✅ ${t('kitchen.requestsClosed')}: ${req.done.map(nameOf).join(', ')}`
+      if (req?.stillOpen?.length)
+        text += ` · ⚠️ ${t('kitchen.requestsStillOpen')}: ${req.stillOpen.map((s) => `${nameOf(s.productCode)} (${fmtNum(s.remaining)}/${fmtNum(s.threshold)})`).join(', ')}`
+      setMsg({ tone: 'info', text })
       setQty({})
       setNotes('')
       loadProducts()
@@ -217,7 +223,7 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
             rowKey={(r) => String(r.requestId)}
             empty={t('kitchen.noRequests')}
             columns={[
-              { key: 'createdAt', label: t('kitchen.when') },
+              { key: 'createdAt', label: t('kitchen.when'), render: (r) => fmtDateTime(r.createdAt) },
               { key: 'productName', label: t('kitchen.product') },
               { key: 'requestedQty', label: t('kitchen.qty'), align: 'right' },
               { key: 'requestedBy', label: t('kitchen.by') },
@@ -252,7 +258,7 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
                 rows={recentDone as unknown as Record<string, unknown>[]}
                 rowKey={(r) => String(r.requestId)}
                 columns={[
-                  { key: 'updatedAt', label: t('kitchen.when') },
+                  { key: 'updatedAt', label: t('kitchen.when'), render: (r) => fmtDateTime(r.updatedAt) },
                   { key: 'productName', label: t('kitchen.product') },
                   { key: 'requestedQty', label: t('kitchen.qty'), align: 'right' },
                   { key: 'handledBy', label: t('kitchen.by') },

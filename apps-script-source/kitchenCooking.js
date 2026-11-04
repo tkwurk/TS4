@@ -1018,8 +1018,14 @@ function submitCookingBatchSecure(params) {
 
     _clearCookingStockCache_(outlet, startTime);
 
+    var resolvedRequests = null;
     try {
-      _resolveCookRequestsForProducts_(outlet, saved.map(function(s) { return s.productCode; }), session.username);
+      resolvedRequests = _resolveCookRequestsAfterBatch_(
+        outlet,
+        saved.map(function(s) { return s.productCode; }),
+        session.username,
+        products
+      );
     } catch (reqErr) {
       Logger.log('cook request auto-resolve failed: ' + reqErr.toString());
     }
@@ -1028,7 +1034,8 @@ function submitCookingBatchSecure(params) {
       success: true,
       cookingId: cookingId,
       lineCount: saved.length,
-      lines: saved
+      lines: saved,
+      requests: resolvedRequests
     };
     if (idemKey && typeof putIdempotentResult_ === 'function') {
       putIdempotentResult_(idemKey, response, 600);
@@ -1375,6 +1382,68 @@ function updateCookRequestStatusSecure(params) {
 }
 
 /** Auto-close open requests when a matching cook batch is logged. */
+/**
+ * After a cooking batch: close open requests only for products whose remaining
+ * stock is now ABOVE the recook threshold. Products still at/below threshold
+ * keep their request open (status COOKING, remaining refreshed) so the alert
+ * persists until enough has been cooked.
+ */
+function _resolveCookRequestsAfterBatch_(outlet, productCodes, username, products) {
+  var result = { done: [], stillOpen: [] };
+  if (!productCodes || !productCodes.length) return result;
+  var sheet = getGlobalSpreadsheet().getSheetByName(SHEETS.KITCHEN_COOK_REQUESTS);
+  if (!sheet || sheet.getLastRow() < 2) return result;
+
+  var wanted = {};
+  productCodes.forEach(function(c) {
+    var u = (c || '').toString().trim().toUpperCase();
+    if (u) wanted[u] = true;
+  });
+
+  // Fresh stock position (cache was just cleared by the caller).
+  var byCode = {};
+  try {
+    var summary = _buildCookingStockSummary(outlet, new Date(), { skipCache: true, products: products || getCookingProductsFromSheet(outlet) });
+    summary.forEach(function(it) {
+      var u = (it.productCode || '').toString().trim().toUpperCase();
+      if (u) byCode[u] = it;
+    });
+  } catch (e) {
+    Logger.log('_resolveCookRequestsAfterBatch_: summary failed, falling back to unconditional close: ' + e);
+  }
+
+  var idx = _kcHeaders(sheet);
+  var ou = (outlet || '').toString().trim().toUpperCase();
+  var nowStr = formatTimestampForSheet(new Date());
+  var data = _readSheetAllRows_(sheet);
+  for (var r = 1; r < data.length; r++) {
+    var row = data[r];
+    if (!_isOpenCookRequestStatus_(row[idx.STATUS])) continue;
+    var code = (row[idx.PRODUCTCODE] || '').toString().trim().toUpperCase();
+    if (!wanted[code]) continue;
+    if (ou && (row[idx.OUTLET] || '').toString().trim().toUpperCase() !== ou) continue;
+
+    var item = byCode[code];
+    var aboveThreshold = !item || !item.needsRecook; // unknown product → treat as satisfied (legacy behaviour)
+    var range = sheet.getRange(r + 1, 1, 1, sheet.getLastColumn());
+    var vals = range.getValues()[0];
+    if (item && idx.REMAINING !== undefined) vals[idx.REMAINING] = item.remaining;
+    if (item && idx.SEVERITY !== undefined) vals[idx.SEVERITY] = item.stockStatus || '';
+    vals[idx.UPDATEDAT] = nowStr;
+    if (username) vals[idx.HANDLEDBY] = username;
+    if (aboveThreshold) {
+      vals[idx.STATUS] = 'DONE';
+      result.done.push(code);
+    } else {
+      vals[idx.STATUS] = 'COOKING';
+      result.stillOpen.push({ productCode: code, remaining: item.remaining, threshold: item.recookThreshold });
+    }
+    range.setValues([vals]);
+  }
+  return result;
+}
+
+/** Legacy: unconditional close (kept for callers that need it). */
 function _resolveCookRequestsForProducts_(outlet, productCodes, username) {
   try {
     if (!productCodes || !productCodes.length) return;
