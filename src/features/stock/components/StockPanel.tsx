@@ -23,6 +23,12 @@ interface StockResult {
   historyIncomplete: boolean
 }
 
+const fmtDate = (v: string) => {
+  if (!v) return '—'
+  const d = new Date(v)
+  return isNaN(d.getTime()) ? v : d.toLocaleDateString()
+}
+
 /** Stock — current ledger totals (purchased − consumed − sold) per buy product for the outlet. */
 export function StockPanel({ auth }: { auth: AuthContext }) {
   const { t, fmtNum } = useI18n()
@@ -38,8 +44,8 @@ export function StockPanel({ auth }: { auth: AuthContext }) {
     const r = await callSecure<StockResult>('getStockTotalsSecure', { outlet: auth.outlet }, auth)
     setLoading(false)
     if (!r.ok) return setError(r.error)
-    const d = r.data as unknown as { data?: StockResult } & StockResult
-    setData(d?.items ? d : (d?.data ?? null))
+    const d = r.data as unknown as { items?: StockItem[] } & StockResult
+    setData(d?.items ? d : null)
   }, [auth])
 
   useEffect(() => {
@@ -78,7 +84,7 @@ export function StockPanel({ auth }: { auth: AuthContext }) {
           items={[
             { label: t('stock.products'), value: fmtNum(data.items.length) },
             { label: t('stock.outOfStock'), value: fmtNum(low), tone: low ? 'bad' : 'ok' },
-            { label: t('stock.asOf'), value: data.historyAsOfDate || data.todayDate || '—' },
+            { label: t('stock.asOf'), value: fmtDate(data.historyAsOfDate || data.todayDate) },
           ]}
         />
       )}

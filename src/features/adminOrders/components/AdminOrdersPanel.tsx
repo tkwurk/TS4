@@ -55,9 +55,11 @@ export function AdminOrdersPanel({ auth }: { auth: AuthContext }) {
   }, [auth, from, to, outlet])
 
   useEffect(() => {
-    callSecure<{ outlets?: string[] }>('getOutletsForAdminSecure', { deviceId: auth.deviceId, username: auth.username }, auth).then((r) =>
-      setOutlets(r.data?.outlets ?? []),
-    )
+    callSecure<{ outlets?: string[] } | Array<string | { name: string }>>('getOutletsForAdminSecure', { deviceId: auth.deviceId, username: auth.username }, auth).then((r) => {
+      const d = r.data
+      const list = Array.isArray(d) ? d.map((o) => (typeof o === 'string' ? o : o.name)) : (d?.outlets ?? [])
+      setOutlets(list.filter(Boolean))
+    })
   }, [auth])
   useEffect(() => {
     load()

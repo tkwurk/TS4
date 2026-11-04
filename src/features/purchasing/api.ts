@@ -120,8 +120,9 @@ export function recordPurchase(
 }
 
 export async function fetchOrderedPurchases(auth: AuthContext): Promise<OrderedPurchase[]> {
-  const r = await callPositional<{ data?: OrderedPurchase[] }>('getOrderedPurchases', [auth.deviceId, auth.username])
-  return r.data?.data ?? []
+  const r = await callPositional<OrderedPurchase[] | { data?: OrderedPurchase[] }>('getOrderedPurchases', [auth.deviceId, auth.username])
+  const d = r.data
+  return Array.isArray(d) ? d : (d?.data ?? [])
 }
 
 export const markReceived = (rowIndex: number, rquantity: number, auth: AuthContext) =>
