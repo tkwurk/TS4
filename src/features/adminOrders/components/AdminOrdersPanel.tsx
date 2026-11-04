@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { localDate } from '@/lib/dates'
 import { callSecure } from '@/services/api'
 import type { AuthContext } from '@/services/api'
 import { Button, DataTable, Field, FormRow, Notice, Panel, Select, Stats, TextInput } from '@/components/ui'
@@ -19,7 +20,7 @@ interface AdminOrder {
   productCode: string
 }
 type Msg = { tone: 'info' | 'error'; text: string }
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => localDate()
 
 /**
  * Orders (admin) — mirrors the core of ui_adminOrders.html: list order lines by

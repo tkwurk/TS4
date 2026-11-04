@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { localDate } from '@/lib/dates'
 import type { AuthContext } from '@/services/api'
 import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, SubTabs, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
@@ -6,7 +7,7 @@ import { fetchAttendanceForDate, fetchAttendanceSummary, fetchEmployees, recordE
 
 type Tab = 'morning' | 'evening' | 'day' | 'summary'
 type Msg = { tone: 'info' | 'error'; text: string }
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => localDate()
 const nowHM = () => new Date().toTimeString().slice(0, 5)
 const STATUSES = ['Present', 'Late', 'Half Day', 'Absent']
 

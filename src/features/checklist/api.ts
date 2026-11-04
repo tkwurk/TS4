@@ -1,4 +1,5 @@
 import { callPositional } from '@/services/api'
+import { localDate } from '@/lib/dates'
 import type { AuthContext } from '@/services/api'
 
 export interface ChecklistDef {
@@ -71,7 +72,7 @@ export const reviewShift = (auth: AuthContext, p: { shiftId: string; checklistId
 /** Mirrors server _generateShiftId(): OUTLET(≤6)-CHECKLISTID(≤12)-YYYYMMDD. */
 export const todayShiftId = (outlet: string, checklistId: string) => {
   const safe = (outlet || 'XX').replace(/\s+/g, '').toUpperCase().slice(0, 6)
-  const d = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const d = localDate().replace(/-/g, '')
   const cid = (checklistId || 'DEFAULT').replace(/\s+/g, '').toUpperCase().slice(0, 12)
   return `${safe}-${cid}-${d}`
 }

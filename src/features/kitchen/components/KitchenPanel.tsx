@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { localDate, localDateTime } from '@/lib/dates'
 import type { AuthContext } from '@/services/api'
 import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Stats, SubTabs, TextArea, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
@@ -18,12 +19,8 @@ import {
 type Tab = 'cook' | 'requests' | 'today' | 'history'
 type Msg = { tone: 'info' | 'error'; text: string }
 
-const nowLocal = () => {
-  const d = new Date()
-  d.setSeconds(0, 0)
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-}
-const today = () => new Date().toISOString().slice(0, 10)
+const nowLocal = () => localDateTime()
+const today = () => localDate()
 
 /**
  * Kitchen tab — mirrors ui_kitchenCooking.html: log a cooking batch (shared

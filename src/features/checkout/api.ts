@@ -5,6 +5,7 @@
  * the RPC bridge. Never touches Sheets directly (see /AGENTS.md).
  */
 import { api, rpc } from '@/services/api'
+import { localDate } from '@/lib/dates'
 import type { ApiEnvelope, AuthContext } from '@/services/api'
 import type { CartItem, CheckoutResult, PaymentDecision, PaymentMethod } from './types'
 import { isSellingMethod, sellableItems } from './types'
@@ -90,7 +91,7 @@ export function recordDiscountExpense(
   orderRef: string,
   auth: AuthContext,
 ): Promise<ApiEnvelope<unknown>> {
-  const date = new Date().toISOString().slice(0, 10)
+  const date = localDate()
   return rpc('recordExpenseSecure', [
     { amount, account: 'Discount', payment, note: orderRef, date, _authContext: auth },
   ])

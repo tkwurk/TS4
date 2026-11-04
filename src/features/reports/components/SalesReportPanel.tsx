@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { addDays, localDate } from '@/lib/dates'
 import type { AuthContext } from '@/services/api'
 import { Button, DataTable, Field, FormRow, Notice, Panel, Stats, SubTabs, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
 import { fetchOrderLines, fetchSalesSummary, type OrderLine, type SalesSummary } from '../reportsApi'
 
 type View = 'summary' | 'products' | 'lines'
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => localDate()
 
 /** Daily sales — mirrors ui_showSalesSummary.html / ui_index.html (getSalesSummaryByDate + getOrderLinesByDate). */
 export function SalesReportPanel({ auth }: { auth: AuthContext }) {
@@ -38,11 +39,7 @@ export function SalesReportPanel({ auth }: { auth: AuthContext }) {
       .sort((a, b) => b.total - a.total)
   }, [summary])
 
-  const shift = (days: number) => {
-    const d = new Date(date)
-    d.setDate(d.getDate() + days)
-    setDate(d.toISOString().slice(0, 10))
-  }
+  const shift = (days: number) => setDate(addDays(date, days))
 
   return (
     <Panel title={`📅 ${t('nav.monthlySalesReport')}`}>
