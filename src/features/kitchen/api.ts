@@ -24,6 +24,9 @@ export interface CookRequest {
   updatedAt?: string
   handledBy?: string
   notes?: string
+  source?: string
+  lastNotifiedAt?: string
+  notifyCount?: number
 }
 
 export interface CookingHistoryRow {

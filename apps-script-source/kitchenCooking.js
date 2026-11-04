@@ -1210,7 +1210,10 @@ function _cookRequestRowToObject_(row, idx) {
     remaining: (row[idx.REMAINING] === '' || row[idx.REMAINING] == null) ? null : Number(row[idx.REMAINING]),
     updatedAt: _kcFormatReportTimeSafe_(row[idx.UPDATEDAT]),
     handledBy: row[idx.HANDLEDBY],
-    notes: row[idx.NOTES]
+    notes: row[idx.NOTES],
+    source: row[idx.SOURCE] !== undefined ? row[idx.SOURCE] : '',
+    lastNotifiedAt: idx.LASTNOTIFIEDAT !== undefined ? _kcFormatReportTimeSafe_(row[idx.LASTNOTIFIEDAT]) : '',
+    notifyCount: idx.NOTIFYCOUNT !== undefined ? (Number(row[idx.NOTIFYCOUNT]) || 0) : 0
   };
 }
 
@@ -1319,6 +1322,7 @@ function getCookRequestsSecure(params) {
     var ou = (outlet || '').toString().trim().toUpperCase();
     var nowMs = Date.now();
     var open = [];
+    var openByCode = {};
     var recentDone = [];
     for (var r = 1; r < data.length; r++) {
       var row = data[r];
@@ -1326,7 +1330,28 @@ function getCookRequestsSecure(params) {
       var status = (row[idx.STATUS] || '').toString().trim().toUpperCase();
       var obj = _cookRequestRowToObject_(row, idx);
       if (_isOpenCookRequestStatus_(status)) {
-        open.push(obj);
+        // One open request per product: keep the earliest (original) request,
+        // surface the latest reminder across any duplicates.
+        var code = (obj.productCode || obj.productName || '').toString().trim().toUpperCase();
+        var prev = openByCode[code];
+        if (!prev) {
+          openByCode[code] = obj;
+          open.push(obj);
+        } else {
+          if (obj.createdAt && (!prev.createdAt || obj.createdAt < prev.createdAt)) {
+            prev.createdAt = obj.createdAt;
+            prev.requestId = obj.requestId;
+            prev.requestedBy = obj.requestedBy;
+          }
+          if (obj.lastNotifiedAt && (!prev.lastNotifiedAt || obj.lastNotifiedAt > prev.lastNotifiedAt)) prev.lastNotifiedAt = obj.lastNotifiedAt;
+          prev.notifyCount = (Number(prev.notifyCount) || 0) + (Number(obj.notifyCount) || 0);
+          if (obj.updatedAt && (!prev.updatedAt || obj.updatedAt > prev.updatedAt)) {
+            prev.updatedAt = obj.updatedAt;
+            prev.remaining = obj.remaining;
+            prev.severity = obj.severity;
+            prev.status = obj.status;
+          }
+        }
       } else if (status === 'DONE') {
         var upd = _parseSheetDate(row[idx.UPDATEDAT]);
         if (upd && (nowMs - upd.getTime()) <= KC_REQUEST_RECENT_DONE_MS) recentDone.push(obj);

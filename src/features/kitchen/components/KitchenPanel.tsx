@@ -9,7 +9,6 @@ import {
   getCookingProducts,
   getCookingTodayReport,
   submitCookingBatch,
-  updateCookRequestStatus,
   type CookRequest,
   type CookingHistoryRow,
   type CookingProduct,
@@ -92,11 +91,7 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
     }
   }, [auth])
 
-  const setStatus = async (id: string, status: string) => {
-    const r = await updateCookRequestStatus(id, status, auth)
-    if (r.ok) loadRequests()
-    else setMsg({ tone: 'error', text: r.error ?? '' })
-  }
+  const thresholdOf = (code: unknown) => products.find((p) => p.productCode.toUpperCase() === String(code ?? '').toUpperCase())?.recookThreshold
 
   // ── Today report ──
   const [reportDate, setReportDate] = useState(today)
@@ -218,36 +213,57 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
             </Button>
           </div>
           <h4 className="muted">{t('kitchen.openRequests')}</h4>
+          <p className="muted">{t('kitchen.requestsHelp')}</p>
           <DataTable
             rows={open as unknown as Record<string, unknown>[]}
             rowKey={(r) => String(r.requestId)}
             empty={t('kitchen.noRequests')}
             columns={[
-              { key: 'createdAt', label: t('kitchen.when'), render: (r) => fmtDateTime(r.createdAt) },
-              { key: 'productName', label: t('kitchen.product') },
-              { key: 'requestedQty', label: t('kitchen.qty'), align: 'right' },
-              { key: 'requestedBy', label: t('kitchen.by') },
+              { key: 'productName', label: t('kitchen.product'), render: (r) => <strong>{String(r.productName ?? r.productCode)}</strong> },
+              {
+                key: 'remaining',
+                label: t('kitchen.remaining'),
+                align: 'right',
+                render: (r) => {
+                  const th = thresholdOf(r.productCode)
+                  const rem = r.remaining == null ? null : Number(r.remaining)
+                  return (
+                    <Badge tone={rem != null && rem <= 0 ? 'bad' : 'neutral'}>
+                      {rem == null ? '—' : fmtNum(rem)}
+                      {th != null ? ` / ${fmtNum(th)}` : ''}
+                    </Badge>
+                  )
+                },
+              },
+              {
+                key: 'createdAt',
+                label: t('kitchen.requestedAt'),
+                render: (r) => (
+                  <>
+                    <strong>{fmtDateTime(r.createdAt)}</strong>
+                    <div className="muted">{String(r.requestedBy ?? '')}</div>
+                  </>
+                ),
+              },
+              {
+                key: 'lastNotifiedAt',
+                label: t('kitchen.remindedAt'),
+                render: (r) =>
+                  r.lastNotifiedAt ? (
+                    <>
+                      <strong>{fmtDateTime(r.lastNotifiedAt)}</strong>
+                      <div className="muted">
+                        {t('kitchen.reminders')}: {fmtNum(Number(r.notifyCount) || 0)}
+                      </div>
+                    </>
+                  ) : (
+                    <span className="muted">{t('kitchen.notYetReminded')}</span>
+                  ),
+              },
               {
                 key: 'status',
                 label: t('kitchen.status'),
-                render: (r) => <Badge tone={r.status === 'COOKING' ? 'ok' : 'bad'}>{String(r.status)}</Badge>,
-              },
-              {
-                key: 'actions',
-                label: '',
-                render: (r) => (
-                  <span className="actions" style={{ margin: 0 }}>
-                    {r.status !== 'COOKING' && (
-                      <Button variant="ghost" onClick={() => setStatus(String(r.requestId), 'COOKING')}>
-                        🍳 {t('kitchen.startCooking')}
-                      </Button>
-                    )}
-                    <Button onClick={() => setStatus(String(r.requestId), 'DONE')}>✅ {t('kitchen.done')}</Button>
-                    <Button variant="ghost" onClick={() => setStatus(String(r.requestId), 'CANCELLED')}>
-                      ✕
-                    </Button>
-                  </span>
-                ),
+                render: (r) => <Badge tone={r.status === 'COOKING' ? 'ok' : 'bad'}>{r.status === 'COOKING' ? t('kitchen.cookingInProgress') : t('kitchen.waiting')}</Badge>,
               },
             ]}
           />
@@ -258,9 +274,9 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
                 rows={recentDone as unknown as Record<string, unknown>[]}
                 rowKey={(r) => String(r.requestId)}
                 columns={[
-                  { key: 'updatedAt', label: t('kitchen.when'), render: (r) => fmtDateTime(r.updatedAt) },
                   { key: 'productName', label: t('kitchen.product') },
-                  { key: 'requestedQty', label: t('kitchen.qty'), align: 'right' },
+                  { key: 'createdAt', label: t('kitchen.requestedAt'), render: (r) => fmtDateTime(r.createdAt) },
+                  { key: 'updatedAt', label: t('kitchen.completedAt'), render: (r) => fmtDateTime(r.updatedAt) },
                   { key: 'handledBy', label: t('kitchen.by') },
                 ]}
               />
