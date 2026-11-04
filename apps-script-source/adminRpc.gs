@@ -41,3 +41,60 @@ function refreshSmartPicksSecure(params) {
     return apiFail(e.message || e, 'SMARTPICKS_REFRESH_FAILED');
   }
 }
+
+// ── Cooking stock alerts (cookingAlerts.gs) ─────────────────────────────────
+function _cookAlertTriggerInstalled_() {
+  return ScriptApp.getProjectTriggers().some(function (t) {
+    return t.getHandlerFunction() === 'runCookingStockAlertSweep';
+  });
+}
+
+function getCookingAlertStatusSecure(params) {
+  try {
+    requireAdmin_(params);
+    var recipients = null;
+    try {
+      var r = _cookingAlertRecipients_((params._authContext && params._authContext.outlet) || '');
+      recipients = r && r.to ? r.to : (Array.isArray(r) ? r : null);
+    } catch (e) { /* optional */ }
+    return apiOk({
+      installed: _cookAlertTriggerInstalled_(),
+      sweepMinutes: COOK_ALERT_SWEEP_MINUTES,
+      reminderMinutes: Math.round(COOK_ALERT_REMINDER_MS / 60000),
+      recipients: recipients
+    }, 'COOK_ALERT_STATUS');
+  } catch (e) {
+    return apiFail(e.message || e, 'COOK_ALERT_STATUS_FAILED');
+  }
+}
+
+function installCookingAlertTriggerSecure(params) {
+  try {
+    requireAdmin_(params);
+    installCookingStockAlertTrigger();
+    return apiOk({ installed: true }, 'COOK_ALERT_INSTALLED');
+  } catch (e) {
+    return apiFail(e.message || e, 'COOK_ALERT_INSTALL_FAILED');
+  }
+}
+
+function removeCookingAlertTriggerSecure(params) {
+  try {
+    requireAdmin_(params);
+    removeCookingStockAlertTrigger();
+    return apiOk({ installed: false }, 'COOK_ALERT_REMOVED');
+  } catch (e) {
+    return apiFail(e.message || e, 'COOK_ALERT_REMOVE_FAILED');
+  }
+}
+
+/** Run one sweep immediately (creates/refreshes cook requests and emails recipients). */
+function runCookingAlertSweepNowSecure(params) {
+  try {
+    requireAdmin_(params);
+    runCookingStockAlertSweep();
+    return apiOk({ ran: true }, 'COOK_ALERT_SWEPT');
+  } catch (e) {
+    return apiFail(e.message || e, 'COOK_ALERT_SWEEP_FAILED');
+  }
+}

@@ -156,6 +156,7 @@ var RPC_ALLOWED = {
   getAllChecklistDefinitions: 1, getChecklistRoleOptions: 1, saveChecklistDefinition: 1,
   getAllChecklistQuestions: 1, saveChecklistQuestion: 1,
   getSmartPicksTriggerInfoSecure: 1, scheduleSmartPicksTriggerSecure: 1, removeSmartPicksTriggerSecure: 1, refreshSmartPicksSecure: 1,
+  getCookingAlertStatusSecure: 1, installCookingAlertTriggerSecure: 1, removeCookingAlertTriggerSecure: 1, runCookingAlertSweepNowSecure: 1,
   // stock
   getStockTotalsSecure: 1,
   // purchases / inventory

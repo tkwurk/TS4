@@ -5,7 +5,7 @@ import { useI18n } from '@/i18n'
 import { AdminOrdersPanel } from './AdminOrdersPanel'
 import { ProductsAdmin } from './ProductsAdmin'
 import { ChecklistDefsAdmin, ChecklistQuestionsAdmin } from './ChecklistAdmin'
-import { BomAdmin, SmartPicksAdmin } from './SmartPicksBomAdmin'
+import { BomAdmin, AutomationAdmin } from './SmartPicksBomAdmin'
 import { PeopleAdmin } from './PeopleAdmin'
 import { PrintersAdmin } from './PrintersAdmin'
 
@@ -27,7 +27,7 @@ export function AdminPanel({ auth }: { auth: AuthContext }) {
           { id: 'products', label: `📦 ${t('adm.products')}` },
           { id: 'checklistdefs', label: `📁 ${t('adm.checklists')}` },
           { id: 'checklistquestions', label: `❓ ${t('adm.questions')}` },
-          { id: 'smartpicks', label: `⚡ ${t('adm.smartPicks')}` },
+          { id: 'smartpicks', label: `⚙️ ${t('adm.automation')}` },
           { id: 'bom', label: `🧾 ${t('adm.bom')}` },
           { id: 'people', label: `👥 ${t('adm.people')}` },
           { id: 'printer', label: `🖨️ ${t('adm.printers')}` },
@@ -45,7 +45,7 @@ export function AdminPanel({ auth }: { auth: AuthContext }) {
         />
       )}
       {tab === 'checklistquestions' && <ChecklistQuestionsAdmin auth={auth} checklistId={checklistId} onChecklistChange={setChecklistId} />}
-      {tab === 'smartpicks' && <SmartPicksAdmin auth={auth} />}
+      {tab === 'smartpicks' && <AutomationAdmin auth={auth} />}
       {tab === 'bom' && <BomAdmin auth={auth} />}
       {tab === 'people' && <PeopleAdmin auth={auth} />}
       {tab === 'printer' && <PrintersAdmin auth={auth} />}

@@ -5,15 +5,91 @@ import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Select, Stats,
 import { useI18n } from '@/i18n'
 import {
   fetchBom,
+  fetchCookAlertStatus,
   fetchSmartPicksInfo,
+  installCookAlerts,
   refreshSmartPicksNow,
+  removeCookAlerts,
   removeSmartPicks,
+  runCookAlertSweep,
   scheduleSmartPicks,
   type BomSummary,
+  type CookAlertStatus,
   type SmartPicksInfo,
 } from '../api'
 
 type Msg = { tone: 'info' | 'error'; text: string }
+
+/** Automation: Smart picks cache/trigger + cooking stock alert trigger. */
+export function AutomationAdmin({ auth }: { auth: AuthContext }) {
+  return (
+    <>
+      <CookAlertsAdmin auth={auth} />
+      <SmartPicksAdmin auth={auth} />
+    </>
+  )
+}
+
+/** Cooking stock alerts (cookingAlerts.gs): a 5-minute server sweep that opens cook requests and emails chefs/managers. */
+export function CookAlertsAdmin({ auth }: { auth: AuthContext }) {
+  const { t } = useI18n()
+  const [status, setStatus] = useState<CookAlertStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<Msg | null>(null)
+
+  const load = useCallback(async () => {
+    const r = await fetchCookAlertStatus(auth)
+    if (r.ok) setStatus(r.data)
+    else setMsg({ tone: 'error', text: r.error ?? '' })
+  }, [auth])
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const act = async (fn: () => Promise<{ ok: boolean; error: string | null }>, okText: string) => {
+    setBusy(true)
+    const r = await fn()
+    setBusy(false)
+    if (r.ok) {
+      setMsg({ tone: 'info', text: okText })
+      load()
+    } else setMsg({ tone: 'error', text: r.error ?? '' })
+  }
+
+  return (
+    <Panel title={`🔔 ${t('adm.cookAlerts')}`}>
+      {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
+      <p className="muted">{t('adm.cookAlertsHelp')}</p>
+      {status && (
+        <Stats
+          items={[
+            { label: t('adm.alertTrigger'), value: status.installed ? t('adm.active') : t('adm.inactive'), tone: status.installed ? 'ok' : 'bad' },
+            { label: t('adm.sweepEvery'), value: `${status.sweepMinutes ?? 5} min` },
+            { label: t('adm.remindEvery'), value: `${status.reminderMinutes ?? 30} min` },
+            { label: t('adm.recipients'), value: status.recipients?.length ?? 0 },
+          ]}
+        />
+      )}
+      {status && !status.installed && <Notice tone="warn">{t('adm.cookAlertsOff')}</Notice>}
+      {status && status.recipients && status.recipients.length === 0 && <Notice tone="warn">{t('adm.noRecipients')}</Notice>}
+      {status?.recipients && status.recipients.length > 0 && <p className="muted">{status.recipients.join(', ')}</p>}
+      <div className="actions">
+        {status?.installed ? (
+          <Button variant="ghost" disabled={busy} onClick={() => act(() => removeCookAlerts(auth), t('adm.triggerRemoved'))}>
+            🗑️ {t('adm.removeTrigger')}
+          </Button>
+        ) : (
+          <Button disabled={busy} onClick={() => act(() => installCookAlerts(auth), t('adm.cookAlertsInstalled'))}>
+            ✅ {t('adm.enableCookAlerts')}
+          </Button>
+        )}
+        <Button variant="ghost" disabled={busy} onClick={() => act(() => runCookAlertSweep(auth), t('adm.sweepDone'))}>
+          {busy ? t('common.loading') : `▶ ${t('adm.runSweepNow')}`}
+        </Button>
+      </div>
+    </Panel>
+  )
+}
 
 /** Mirrors ui_adminOrders.html "Smart Picks" pane: cache status + daily trigger management. */
 export function SmartPicksAdmin({ auth }: { auth: AuthContext }) {

@@ -75,6 +75,18 @@ export const removeSmartPicks = (auth: AuthContext) => callSecure<{ removed?: nu
 export const refreshSmartPicksNow = (auth: AuthContext) =>
   callSecure<{ message?: string; totalRows?: number; updatedAt?: string }>('refreshSmartPicksSecure', {}, auth)
 
+// ---------- Cooking stock alerts (auto cook requests + emails) ----------
+export interface CookAlertStatus {
+  installed?: boolean
+  sweepMinutes?: number
+  reminderMinutes?: number
+  recipients?: string[] | null
+}
+export const fetchCookAlertStatus = (auth: AuthContext) => callSecure<CookAlertStatus>('getCookingAlertStatusSecure', {}, auth)
+export const installCookAlerts = (auth: AuthContext) => callSecure('installCookingAlertTriggerSecure', {}, auth)
+export const removeCookAlerts = (auth: AuthContext) => callSecure('removeCookingAlertTriggerSecure', {}, auth)
+export const runCookAlertSweep = (auth: AuthContext) => callSecure('runCookingAlertSweepNowSecure', {}, auth)
+
 // ---------- BOM ----------
 export interface BomLine {
   bomId: string
