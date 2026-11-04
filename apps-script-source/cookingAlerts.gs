@@ -17,38 +17,95 @@
 var COOK_ALERT_REMINDER_MS = 30 * 60 * 1000; // remind every 30 minutes
 var COOK_ALERT_SWEEP_MINUTES = 5;            // how often the trigger checks stock
 
-/** Time-trigger entry point: check every outlet and alert/remind as needed. */
-function runCookingStockAlertSweep() {
+/**
+ * Outlets to sweep = Outlets sheet ∪ outlets named on active cooking products ∪
+ * outlets of active People. The Outlets sheet alone is not reliable (rows with
+ * a blank ID are dropped by getOutlets, and new outlets are often added only
+ * on products/people first).
+ */
+function _cookAlertOutletKeys_() {
+  var keys = [];
+  var seen = {};
+  function add(v) {
+    var k = (v == null ? '' : String(v)).trim();
+    if (!k) return;
+    var u = k.toUpperCase();
+    if (u === 'ALL' || u === '*') return;
+    if (seen[u]) return;
+    seen[u] = true;
+    keys.push(k);
+  }
   try {
-    var keys = [];
-    var outlets = (typeof getOutlets === 'function') ? getOutlets() : [];
-    if (outlets && outlets.length) {
-      outlets.forEach(function (o) {
-        var k = (o.name || o.id || '').toString().trim();
-        if (k && keys.indexOf(k) === -1) keys.push(k);
-      });
+    ((typeof getOutlets === 'function') ? getOutlets() : []).forEach(function (o) { add(o.name || o.id); });
+  } catch (e) { Logger.log('cook alert outlets: Outlets sheet error ' + e); }
+  try {
+    var sheet = getGlobalSpreadsheet().getSheetByName(SHEETS.PRODUCTS);
+    if (sheet && sheet.getLastRow() > 1) {
+      var data = sheet.getDataRange().getValues();
+      var headers = data[0].map(function (h) { return String(h).trim().toUpperCase(); });
+      var cookIdx = headers.indexOf('COOKING_PRODUCT');
+      var outletIdx = headers.indexOf('OUTLET');
+      var activeIdx = headers.indexOf('ACTIVE');
+      if (cookIdx >= 0 && outletIdx >= 0) {
+        for (var r = 1; r < data.length; r++) {
+          if (!_isTruthyCookingFlag(data[r][cookIdx])) continue;
+          if (activeIdx >= 0) {
+            var a = String(data[r][activeIdx] || '').trim().toUpperCase();
+            if (a === 'N' || a === 'NO' || a === 'FALSE' || a === '0') continue;
+          }
+          String(data[r][outletIdx] || '').split(',').forEach(add);
+        }
+      }
     }
+  } catch (e) { Logger.log('cook alert outlets: Products error ' + e); }
+  try {
+    if (typeof ensurePeopleSheet_ === 'function' && typeof personFromRow_ === 'function') {
+      var ps = ensurePeopleSheet_();
+      var pd = ps.getDataRange().getValues();
+      for (var i = 1; i < pd.length; i++) {
+        var p = personFromRow_(pd[i]);
+        if (!p) continue;
+        var act = String(p.active || 'Y').trim().toUpperCase();
+        if (['N', 'NO', 'FALSE', '0'].indexOf(act) !== -1) continue;
+        String(p.outlet || '').split(',').forEach(add);
+      }
+    }
+  } catch (e) { Logger.log('cook alert outlets: People error ' + e); }
+  return keys;
+}
+
+/** Time-trigger entry point: check every outlet and alert/remind as needed. Returns a summary (used by Admin "Check now"). */
+function runCookingStockAlertSweep() {
+  var summary = { outlets: [], errors: [] };
+  try {
+    var keys = _cookAlertOutletKeys_();
     if (!keys.length) keys = ['']; // single-outlet / unconfigured fallback
 
     keys.forEach(function (outlet) {
       try {
-        _sweepCookingAlertsForOutlet_(outlet);
+        summary.outlets.push(_sweepCookingAlertsForOutlet_(outlet));
       } catch (e) {
         Logger.log('cook alert sweep failed for outlet "' + outlet + '": ' + e.toString());
+        summary.errors.push({ outlet: outlet, error: e.toString() });
       }
     });
   } catch (e) {
     Logger.log('runCookingStockAlertSweep error: ' + e.toString());
+    summary.errors.push({ outlet: '*', error: e.toString() });
   }
+  return summary;
 }
 
 function _sweepCookingAlertsForOutlet_(outlet) {
+  var result = { outlet: outlet, products: 0, below: 0, created: 0, updated: 0, mail: 'none', recipients: 0, mailError: '' };
   var products = getCookingProductsFromSheet(outlet);
-  if (!products.length) return;
+  result.products = products.length;
+  if (!products.length) return result;
 
   var now = new Date();
   var summary = _buildCookingStockSummary(outlet, now, { skipCache: true, products: products });
   var below = summary.filter(function (i) { return i.needsRecook; });
+  result.below = below.length;
 
   var sheet = ensureKitchenCookRequestsHeaders();
   var idx = _kcHeaders(sheet);
@@ -72,6 +129,7 @@ function _sweepCookingAlertsForOutlet_(outlet) {
       vals[idx.SEVERITY] = item.stockStatus;
       vals[idx.UPDATEDAT] = nowStr;
       range.setValues([vals]);
+      result.updated++;
 
       var last = _parseSheetDate(vals[idx.LASTNOTIFIEDAT]);
       var due = !last || (now.getTime() - last.getTime()) >= COOK_ALERT_REMINDER_MS;
@@ -98,6 +156,7 @@ function _sweepCookingAlertsForOutlet_(outlet) {
       row[idx.NOTIFYCOUNT] = 0;
       sheet.appendRow(row);
       data.push(row); // keep local scan in sync to avoid same-sweep duplicates
+      result.created++;
 
       newAlertCount++;
       dueItems.push(item);
@@ -107,8 +166,11 @@ function _sweepCookingAlertsForOutlet_(outlet) {
 
   if (dueItems.length) {
     var recipients = _cookingAlertRecipients_(outlet);
+    result.recipients = recipients.to.length;
     var isReminder = newAlertCount === 0;
     var sent = _sendCookAlertEmail_(outlet, dueItems, isReminder, recipients);
+    result.mail = sent ? (isReminder ? 'reminder-sent' : 'sent') : 'failed';
+    result.mailError = sent ? '' : (_cookAlertLastMailError_ || (recipients.to.length ? '' : 'no recipients'));
     if (sent) {
       pendingStampRows.forEach(function (sheetRow) {
         var range = sheet.getRange(sheetRow, 1, 1, sheet.getLastColumn());
@@ -121,6 +183,7 @@ function _sweepCookingAlertsForOutlet_(outlet) {
   }
 
   _closeRecoveredAutoAlerts_(sheet, idx, outlet, belowCodes, nowStr);
+  return result;
 }
 
 /** Auto-close alerts for products that are no longer below threshold. */
@@ -188,9 +251,12 @@ function _cookingAlertRecipients_(outlet) {
   return out;
 }
 
+var _cookAlertLastMailError_ = '';
 function _sendCookAlertEmail_(outlet, items, isReminder, recipients) {
+  _cookAlertLastMailError_ = '';
   if (!recipients || !recipients.to || !recipients.to.length) {
     Logger.log('Cook alert: no Chef/Manager/Director recipients for outlet "' + outlet + '"');
+    _cookAlertLastMailError_ = 'no recipients';
     return false;
   }
   try {
@@ -231,6 +297,7 @@ function _sendCookAlertEmail_(outlet, items, isReminder, recipients) {
     return true;
   } catch (e) {
     Logger.log('Cook alert email failed: ' + e.toString());
+    _cookAlertLastMailError_ = e.message || e.toString();
     return false;
   }
 }

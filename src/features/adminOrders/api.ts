@@ -81,11 +81,26 @@ export interface CookAlertStatus {
   sweepMinutes?: number
   reminderMinutes?: number
   recipients?: string[] | null
+  mailQuotaRemaining?: number | null
+}
+export interface SweepOutletResult {
+  outlet: string
+  products: number
+  below: number
+  created: number
+  updated: number
+  mail: string
+  recipients: number
+  mailError: string
+}
+export interface SweepResult {
+  summary?: { outlets?: SweepOutletResult[]; errors?: { outlet: string; error: string }[] }
+  mailQuotaRemaining?: number | null
 }
 export const fetchCookAlertStatus = (auth: AuthContext) => callSecure<CookAlertStatus>('getCookingAlertStatusSecure', {}, auth)
 export const installCookAlerts = (auth: AuthContext) => callSecure('installCookingAlertTriggerSecure', {}, auth)
 export const removeCookAlerts = (auth: AuthContext) => callSecure('removeCookingAlertTriggerSecure', {}, auth)
-export const runCookAlertSweep = (auth: AuthContext) => callSecure('runCookingAlertSweepNowSecure', {}, auth)
+export const runCookAlertSweep = (auth: AuthContext) => callSecure<SweepResult>('runCookingAlertSweepNowSecure', {}, auth)
 
 // ---------- BOM ----------
 export interface BomLine {

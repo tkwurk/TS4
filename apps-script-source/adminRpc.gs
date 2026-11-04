@@ -57,11 +57,14 @@ function getCookingAlertStatusSecure(params) {
       var r = _cookingAlertRecipients_((params._authContext && params._authContext.outlet) || '');
       recipients = r && r.to ? r.to : (Array.isArray(r) ? r : null);
     } catch (e) { /* optional */ }
+    var quota = null;
+    try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { /* optional */ }
     return apiOk({
       installed: _cookAlertTriggerInstalled_(),
       sweepMinutes: COOK_ALERT_SWEEP_MINUTES,
       reminderMinutes: Math.round(COOK_ALERT_REMINDER_MS / 60000),
-      recipients: recipients
+      recipients: recipients,
+      mailQuotaRemaining: quota
     }, 'COOK_ALERT_STATUS');
   } catch (e) {
     return apiFail(e.message || e, 'COOK_ALERT_STATUS_FAILED');
@@ -92,8 +95,10 @@ function removeCookingAlertTriggerSecure(params) {
 function runCookingAlertSweepNowSecure(params) {
   try {
     requireAdmin_(params);
-    runCookingStockAlertSweep();
-    return apiOk({ ran: true }, 'COOK_ALERT_SWEPT');
+    var summary = runCookingStockAlertSweep() || {};
+    var quota = null;
+    try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { /* optional */ }
+    return apiOk({ ran: true, summary: summary, mailQuotaRemaining: quota }, 'COOK_ALERT_SWEPT');
   } catch (e) {
     return apiFail(e.message || e, 'COOK_ALERT_SWEEP_FAILED');
   }

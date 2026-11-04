@@ -16,6 +16,7 @@ import {
   type BomSummary,
   type CookAlertStatus,
   type SmartPicksInfo,
+  type SweepResult,
 } from '../api'
 
 type Msg = { tone: 'info' | 'error'; text: string }
@@ -34,6 +35,7 @@ export function AutomationAdmin({ auth }: { auth: AuthContext }) {
 export function CookAlertsAdmin({ auth }: { auth: AuthContext }) {
   const { t } = useI18n()
   const [status, setStatus] = useState<CookAlertStatus | null>(null)
+  const [sweep, setSweep] = useState<SweepResult | null>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg | null>(null)
 
@@ -56,6 +58,20 @@ export function CookAlertsAdmin({ auth }: { auth: AuthContext }) {
     } else setMsg({ tone: 'error', text: r.error ?? '' })
   }
 
+  const sweepNow = async () => {
+    setBusy(true)
+    setSweep(null)
+    const r = await runCookAlertSweep(auth)
+    setBusy(false)
+    if (r.ok) {
+      setSweep(r.data)
+      setMsg({ tone: 'info', text: t('adm.sweepDone') })
+      load()
+    } else setMsg({ tone: 'error', text: r.error ?? '' })
+  }
+
+  const quota = sweep?.mailQuotaRemaining ?? status?.mailQuotaRemaining
+
   return (
     <Panel title={`🔔 ${t('adm.cookAlerts')}`}>
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
@@ -67,10 +83,12 @@ export function CookAlertsAdmin({ auth }: { auth: AuthContext }) {
             { label: t('adm.sweepEvery'), value: `${status.sweepMinutes ?? 5} min` },
             { label: t('adm.remindEvery'), value: `${status.reminderMinutes ?? 30} min` },
             { label: t('adm.recipients'), value: status.recipients?.length ?? 0 },
+            { label: t('adm.mailQuota'), value: quota == null ? '—' : String(quota), tone: quota === 0 ? 'bad' : 'ok' },
           ]}
         />
       )}
       {status && !status.installed && <Notice tone="warn">{t('adm.cookAlertsOff')}</Notice>}
+      {quota === 0 && <Notice tone="warn">{t('adm.mailQuotaOut')}</Notice>}
       {status && status.recipients && status.recipients.length === 0 && <Notice tone="warn">{t('adm.noRecipients')}</Notice>}
       {status?.recipients && status.recipients.length > 0 && <p className="muted">{status.recipients.join(', ')}</p>}
       <div className="actions">
@@ -83,10 +101,41 @@ export function CookAlertsAdmin({ auth }: { auth: AuthContext }) {
             ✅ {t('adm.enableCookAlerts')}
           </Button>
         )}
-        <Button variant="ghost" disabled={busy} onClick={() => act(() => runCookAlertSweep(auth), t('adm.sweepDone'))}>
+        <Button variant="ghost" disabled={busy} onClick={sweepNow}>
           {busy ? t('common.loading') : `▶ ${t('adm.runSweepNow')}`}
         </Button>
       </div>
+      {sweep?.summary && (
+        <>
+          <DataTable
+            rows={(sweep.summary.outlets ?? []) as unknown as Record<string, unknown>[]}
+            rowKey={(r) => String(r.outlet || '(all)')}
+            empty={t('adm.noOutletsSwept')}
+            columns={[
+              { key: 'outlet', label: t('checkout.outlet'), render: (r) => String(r.outlet || '(all)') },
+              { key: 'products', label: t('kitchen.products'), align: 'right' },
+              { key: 'below', label: t('kitchen.needRecook'), align: 'right' },
+              { key: 'created', label: t('adm.requestsCreated'), align: 'right' },
+              { key: 'updated', label: t('adm.requestsUpdated'), align: 'right' },
+              {
+                key: 'mail',
+                label: 'Email',
+                render: (r) => (
+                  <>
+                    <Badge tone={String(r.mail).includes('sent') ? 'ok' : r.mail === 'none' ? 'neutral' : 'bad'}>{String(r.mail)}</Badge>
+                    {r.mailError ? <div className="muted">{String(r.mailError)}</div> : null}
+                  </>
+                ),
+              },
+            ]}
+          />
+          {(sweep.summary.errors ?? []).map((e, i) => (
+            <Notice key={i} tone="error">
+              {e.outlet}: {e.error}
+            </Notice>
+          ))}
+        </>
+      )}
     </Panel>
   )
 }
