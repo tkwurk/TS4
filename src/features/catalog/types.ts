@@ -7,6 +7,15 @@ export interface CatalogResult {
   products: ProductRow[]
 }
 
+/** The catalog.requested pipeline wraps the catalog step's result under steps.catalog. */
+export interface CatalogPipeline {
+  steps?: {
+    catalog?: {
+      data?: CatalogResult
+    }
+  }
+}
+
 /** Best-effort display name from a header-keyed product row. */
 export function productName(row: ProductRow): string {
   const keys = Object.keys(row)

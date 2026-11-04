@@ -29,6 +29,7 @@ export function useCart() {
 
   const total = useMemo(() => items.reduce((sum, i) => sum + i.price * i.qty, 0), [items])
   const count = useMemo(() => items.reduce((sum, i) => sum + i.qty, 0), [items])
+  const qtyOf = useCallback((key: string) => items.find((p) => p.key === key)?.qty ?? 0, [items])
 
-  return { items, add, setQty, remove, clear, total, count }
+  return { items, add, setQty, remove, clear, total, count, qtyOf }
 }

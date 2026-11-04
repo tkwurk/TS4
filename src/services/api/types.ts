@@ -28,6 +28,7 @@ export type ApiEventType =
   | 'catalog.requested'
   | 'auth.login'
   | 'auth.logout'
+  | 'rpc'
   | 'health'
 
 export type ApiPayload = Record<string, unknown>

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { apiConfig } from '@/services/api'
 import { Button, Notice, Panel } from '@/components/ui'
+import { useI18n } from '@/i18n'
 
 /** Operator sign-in form. Submits credentials via the auth hook's `onLogin`. */
 export function LoginPanel({
@@ -12,6 +13,7 @@ export function LoginPanel({
   loading: boolean
   error: string | null
 }) {
+  const { t } = useI18n()
   const configured = Boolean(apiConfig.appsScriptUrl)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -22,19 +24,15 @@ export function LoginPanel({
   }
 
   return (
-    <Panel title="Sign in">
-      {!configured && (
-        <Notice tone="warn">
-          Set <code>VITE_APPS_SCRIPT_URL</code> in <code>.env.local</code> to sign in.
-        </Notice>
-      )}
+    <Panel title={t('login.title')}>
+      {!configured && <Notice tone="warn">{t('login.setup')}</Notice>}
       <form onSubmit={submit}>
         <label className="ui-field">
-          Username
+          {t('login.username')}
           <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
         </label>
         <label className="ui-field">
-          Password
+          {t('login.password')}
           <input
             type="password"
             value={password}
@@ -44,7 +42,7 @@ export function LoginPanel({
         </label>
         <div className="actions">
           <Button type="submit" disabled={!configured || loading || !username || !password}>
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? t('login.signingIn') : t('login.signIn')}
           </Button>
         </div>
       </form>

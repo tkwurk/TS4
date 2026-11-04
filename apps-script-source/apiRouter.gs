@@ -48,6 +48,9 @@ function doPost(e) {
           : { success: false, message: 'logoutUser not available' }
       ));
     }
+    if (eventType === 'rpc') {
+      return _apiJson_(_rpcCall_(payload.fn, payload.args));
+    }
 
     var ctx = Orchestrator.buildContext_(payload, eventType);
     var result = Orchestrator.routeEvent(eventType, payload, ctx);
@@ -98,4 +101,48 @@ function _apiJson_(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Generic RPC bridge (hybrid migration path, see /AGENTS.md). Lets the PWA call
+ * EXISTING whitelisted server functions by name over HTTP — a drop-in for the
+ * old google.script.run, which only works inside Apps Script's own HTML iframe.
+ * The client passes args exactly as the function expects (including a params
+ * object with _authContext for the *Secure functions). Only whitelisted names
+ * may be invoked; the functions' own auth checks still apply.
+ */
+var RPC_ALLOWED = {
+  // auth / session
+  authenticateUserClean: 1, validateUserSession: 1, logoutUser: 1, getUserSessionEnhanced: 1,
+  // products / menu
+  getProducts: 1, getProductsWithOutletAndCategoryFilter: 1, getCookingProductsFromSheet: 1,
+  // sales / orders
+  saveOrderSecure: 1, saveMissedOrdersSecure: 1,
+  // purchases / inventory
+  recordPurchaseSecure: 1, recordInventoryConsumptionSecure: 1,
+  // reports
+  getPnLBundle: 1, getCashSummary: 1, getSalesSummaryByDate: 1,
+  getDailyClosingBundle: 1, getMonthlyUsageReport: 1,
+  // misc
+  getOutlets: 1
+};
+
+function _rpcCall_(fn, args) {
+  if (!fn || !RPC_ALLOWED[fn]) {
+    return apiFail('RPC function not allowed: ' + fn, 'RPC_FORBIDDEN');
+  }
+  var f = (typeof globalThis !== 'undefined') ? globalThis[fn] : null;
+  if (typeof f !== 'function') {
+    return apiFail('RPC function not found: ' + fn, 'RPC_NOT_FOUND');
+  }
+  try {
+    var out = f.apply(null, Array.isArray(args) ? args : []);
+    // Pass through functions that already return an apiOk/apiFail envelope.
+    if (out && typeof out === 'object' && Object.prototype.hasOwnProperty.call(out, 'success')) {
+      return out;
+    }
+    return apiOk(out == null ? null : out, 'RPC_OK');
+  } catch (err) {
+    return apiFail('RPC "' + fn + '" failed: ' + err, 'RPC_ERROR');
+  }
 }

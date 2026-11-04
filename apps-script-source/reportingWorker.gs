@@ -42,6 +42,9 @@ var ReportingWorker = {
       case 'salesSummary':
         report = ReportingWorker._salesSummaryFromRepo(p, c);
         break;
+      case 'recentOrders':
+        report = ReportingWorker._recentOrdersFromRepo(p, c);
+        break;
       case 'dailyClosing':
       default:
         if (typeof getDailyClosingBundle !== 'function') return apiFail('getDailyClosingBundle missing', 'REPORT_DELEGATE_MISSING');
@@ -94,5 +97,38 @@ var ReportingWorker = {
       }
     }
     return undefined;
+  },
+
+  /**
+   * Repo-backed recent orders (Seam 2): returns the most recently appended order
+   * lines from the Orders sheet (newest first). Optional outlet filter + limit.
+   * @return {Object} { source, outlet, count, orders[] }
+   */
+  _recentOrdersFromRepo: function (params, ctx) {
+    var rows = Repo.readRows('ORDERS');
+    var outlet = (params && params.outlet) || (ctx && ctx.outlet) || '';
+    var want = String(outlet).trim().toLowerCase();
+    var filtered = outlet
+      ? rows.filter(function (r) {
+          return String(ReportingWorker._field_(r, 'Outlet') || '').trim().toLowerCase() === want;
+        })
+      : rows;
+
+    var limit = Number(params && params.limit) || 25;
+    var recent = filtered.slice(Math.max(0, filtered.length - limit)).reverse();
+    var orders = recent.map(function (r) {
+      return {
+        timestamp: ReportingWorker._field_(r, 'Timestamp'),
+        orderNumber: ReportingWorker._field_(r, 'Order Number', 'OrderNumber'),
+        product: ReportingWorker._field_(r, 'Product Name', 'ProductName', 'Name'),
+        qty: ReportingWorker._field_(r, 'Quantity', 'Qty'),
+        price: ReportingWorker._field_(r, 'Price'),
+        total: ReportingWorker._field_(r, 'Total'),
+        payment: ReportingWorker._field_(r, 'Payment'),
+        outlet: ReportingWorker._field_(r, 'Outlet'),
+        username: ReportingWorker._field_(r, 'Username')
+      };
+    });
+    return { source: 'repo', outlet: outlet || null, count: orders.length, orders: orders };
   }
 };

@@ -132,3 +132,64 @@
   color: var(--text);
   text-align: left;
 }
+
+.ui-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+  margin-top: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.ui-tab {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 0.55rem 0.9rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.ui-tab__icon {
+  margin-right: 0.35rem;
+}
+
+.ui-tab:hover {
+  color: var(--text-h);
+}
+
+.ui-tab--active {
+  color: var(--text-h);
+  border-bottom-color: var(--accent);
+}
+
+.table-wrap {
+  margin-top: 1rem;
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.data-table th {
+  color: var(--text);
+  font-weight: 600;
+}
