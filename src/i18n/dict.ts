@@ -267,6 +267,9 @@ export const dict: Record<Lang, Record<string, string>> = {
     'cons.loadFailed': 'Could not load the daily closing bundle.',
     'cons.save': 'Record consumption',
     'cons.saved': 'Consumption recorded',
+    'cons.recordedToday': 'Recorded today',
+    'cons.lowOnly': 'At/below reorder level only',
+    'cons.reorderAt': 'Reorder at',
 
     'dep.make': 'Make deposit',
     'dep.history': 'History',
@@ -748,6 +751,9 @@ export const dict: Record<Lang, Record<string, string>> = {
     'cons.loadFailed': 'Gagal memuat data tutup harian.',
     'cons.save': 'Catat pemakaian',
     'cons.saved': 'Pemakaian tercatat',
+    'cons.recordedToday': 'Tercatat hari ini',
+    'cons.lowOnly': 'Hanya di/bawah batas pesan ulang',
+    'cons.reorderAt': 'Pesan ulang di',
 
     'dep.make': 'Setor',
     'dep.history': 'Riwayat',

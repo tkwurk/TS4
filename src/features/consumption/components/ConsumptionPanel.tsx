@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AuthContext } from '@/services/api'
-import { Button, DataTable, Field, Notice, Panel, Stats, SubTabs, TextInput } from '@/components/ui'
+import { fmtDateOnly } from '@/lib/dates'
+import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Stats, SubTabs, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
 import { getDailyClosingBundle, recordConsumption, type DailyClosingBundle } from '../api'
 
@@ -65,6 +66,19 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
   }
 
   const summary = bundle?.summary
+  const kf = bundle?.keyfigures
+  const [kfSearch, setKfSearch] = useState('')
+  const [kfLowOnly, setKfLowOnly] = useState(false)
+  const kfItems = kf?.items ?? []
+  const kfLow = kfItems.filter((i) => (Number(i.remaining) || 0) <= 0).length
+  const kfVisible = useMemo(() => {
+    const q = kfSearch.trim().toLowerCase()
+    return kfItems.filter(
+      (i) =>
+        (!q || i.name.toLowerCase().includes(q) || i.productCode.toLowerCase().includes(q) || (i.category ?? '').toLowerCase().includes(q)) &&
+        (!kfLowOnly || (Number(i.remaining) || 0) <= (Number(i.reorderQty) || 0)),
+    )
+  }, [kfItems, kfSearch, kfLowOnly])
 
   return (
     <Panel title={`🧮 ${t('nav.inventoryConsumption')}`}>
@@ -128,24 +142,80 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
 
       {tab === 'summary' && (
         <>
-          {summary && (
+          {kf && (
             <Stats
               items={[
-                { label: t('cons.items'), value: fmtNum(summary.totalItems ?? 0) },
-                { label: t('cons.totalQty'), value: fmtNum(summary.totalQuantity ?? 0) },
+                { label: t('stock.products'), value: fmtNum(kfItems.length) },
+                { label: t('stock.outOfStock'), value: fmtNum(kfLow), tone: kfLow ? 'bad' : 'ok' },
+                { label: t('cons.recordedToday'), value: fmtNum(summary?.totalQuantity ?? 0) },
+                { label: t('stock.asOf'), value: kf.historyAsOfDate ? fmtDateOnly(kf.historyAsOfDate) : kf.stockSource || '—' },
               ]}
             />
           )}
+          {kf?.needsBootstrap && <Notice tone="warn">{t('stock.historyIncomplete')}</Notice>}
+          <FormRow>
+            <Field label={t('checkout.search')}>
+              <TextInput type="search" value={kfSearch} onChange={(e) => setKfSearch(e.target.value)} />
+            </Field>
+            <label className="ui-field" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', alignSelf: 'end' }}>
+              <input type="checkbox" checked={kfLowOnly} onChange={(e) => setKfLowOnly(e.target.checked)} /> {t('cons.lowOnly')}
+            </label>
+            <div className="actions" style={{ alignSelf: 'end' }}>
+              <Button variant="ghost" onClick={load} disabled={loading}>
+                {loading ? t('common.loading') : '↻'}
+              </Button>
+            </div>
+          </FormRow>
           <DataTable
-            rows={(summary?.items ?? []) as Record<string, unknown>[]}
-            rowKey={(r, i) => `${r.productCode ?? i}`}
-            empty={t('cons.noSummary')}
+            rows={kfVisible as unknown as Record<string, unknown>[]}
+            rowKey={(r) => String(r.productCode)}
+            empty={loading ? t('common.loading') : t('cons.noSummary')}
             columns={[
-              { key: 'name', label: t('purch.product'), render: (r) => String(r.name ?? r.productCode ?? '') },
-              { key: 'unit', label: t('cons.unit') },
-              { key: 'quantity', label: t('cons.consumed'), align: 'right', render: (r) => fmtNum(Number(r.quantity) || 0) },
+              {
+                key: 'name',
+                label: t('purch.product'),
+                render: (r) => (
+                  <>
+                    {String(r.name)}
+                    <div className="muted">
+                      {String(r.category ?? '')}
+                      {r.unit ? ` · ${String(r.unit)}` : ''}
+                      {r.supplier ? ` · ${String(r.supplier)}` : ''}
+                    </div>
+                  </>
+                ),
+              },
+              { key: 'totalPurchased', label: t('stock.purchased'), align: 'right', render: (r) => fmtNum(Number(r.totalPurchased) || 0) },
+              { key: 'totalConsumed', label: t('stock.consumed'), align: 'right', render: (r) => fmtNum(Number(r.totalConsumed) || 0) },
+              { key: 'totalSold', label: t('kitchen.sold'), align: 'right', render: (r) => fmtNum(Number(r.totalSold) || 0) },
+              {
+                key: 'remaining',
+                label: t('kitchen.remaining'),
+                align: 'right',
+                render: (r) => {
+                  const rem = Number(r.remaining) || 0
+                  const reorder = Number(r.reorderQty) || 0
+                  return <Badge tone={rem <= 0 ? 'bad' : reorder && rem <= reorder ? 'neutral' : 'ok'}>{fmtNum(rem)}</Badge>
+                },
+              },
+              { key: 'reorderQty', label: t('cons.reorderAt'), align: 'right', render: (r) => (Number(r.reorderQty) ? fmtNum(Number(r.reorderQty)) : '—') },
             ]}
           />
+
+          {summary && summary.items.length > 0 && (
+            <>
+              <h4 className="muted">📝 {t('cons.recordedToday')}</h4>
+              <DataTable
+                rows={summary.items as Record<string, unknown>[]}
+                rowKey={(r, i) => `${r.productCode ?? i}`}
+                columns={[
+                  { key: 'name', label: t('purch.product'), render: (r) => String(r.name ?? r.productCode ?? '') },
+                  { key: 'unit', label: t('cons.unit') },
+                  { key: 'quantity', label: t('cons.consumed'), align: 'right', render: (r) => fmtNum(Number(r.quantity) || 0) },
+                ]}
+              />
+            </>
+          )}
         </>
       )}
     </Panel>

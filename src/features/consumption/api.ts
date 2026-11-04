@@ -27,11 +27,26 @@ export interface SummaryItem {
   [k: string]: unknown
 }
 
+export interface KeyfigureItem {
+  name: string
+  productCode: string
+  category?: string
+  navCategory?: string
+  unit?: string
+  totalPurchased: number
+  totalConsumed: number
+  totalSold: number
+  remaining: number
+  reorderQty?: number
+  supplier?: string
+  hasRecipe?: boolean
+}
+
 export interface DailyClosingBundle {
   products: BuyProduct[]
   autoPrefill: { date: string; totalItems: number; items: PrefillItem[] }
   summary: { totalItems: number; totalQuantity: number; items: SummaryItem[] }
-  keyfigures?: { items?: Record<string, unknown>[] }
+  keyfigures?: { items?: KeyfigureItem[]; stockSource?: string; historyAsOfDate?: string | null; needsBootstrap?: boolean }
   smartPicks?: { orders?: unknown[]; consumption?: unknown[] }
 }
 
