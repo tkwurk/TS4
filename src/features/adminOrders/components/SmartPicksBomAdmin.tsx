@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { fmtDateTime } from '@/lib/dates'
 import type { AuthContext } from '@/services/api'
 import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Select, Stats, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
@@ -49,7 +50,7 @@ export function SmartPicksAdmin({ auth }: { auth: AuthContext }) {
         <Stats
           items={[
             { label: t('adm.trigger'), value: info.triggerActive ? t('adm.active') : t('adm.inactive'), tone: info.triggerActive ? 'ok' : 'bad' },
-            { label: t('adm.lastUpdated'), value: info.lastUpdated ? new Date(info.lastUpdated).toLocaleString() : '—' },
+            { label: t('adm.lastUpdated'), value: info.lastUpdated ? fmtDateTime(info.lastUpdated) : '—' },
             { label: t('adm.cachedRows'), value: fmtNum(Number(info.totalRows) || 0) },
           ]}
         />

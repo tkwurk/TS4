@@ -96,6 +96,15 @@ them up in the People/roles sheet, and enforces `requirePermission_` before acti
   `apiOk`/`apiFail` envelope. Configure `VITE_APPS_SCRIPT_URL` (see `.env.example`).
   Operator login lives in `src/features/auth/` and supplies the `_authContext`.
 
+## Dates & timezone (client rule)
+The business runs in the Apps Script project timezone (`appsscript.json`
+`timeZone`, Asia/Jakarta). Devices may be elsewhere. On the client, ALWAYS use
+`src/lib/dates.ts` (`localDate`, `localDateTime`, `addDays`, `fmtDateTime`,
+`fmtDateOnly`, `fmtTimeOnly`) for date-picker defaults, business dates sent to
+the server, and displayed timestamps. Never use `toISOString().slice(0,10)`
+(UTC) or `toLocaleString()` without a timezone (device zone) for business data.
+Full ISO instants (e.g. `submittedAt`) are fine as-is.
+
 ## Data Access Layer (Seam 2)
 Implemented in `apps-script-source/`: `repo.gs` (facade — workers call this),
 `spreadsheetAppAdapter.gs` (**default** adapter, Option C: execute-as-owner,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { fmtDateTime } from '@/lib/dates'
 import type { AuthContext } from '@/services/api'
 import { Badge, Button, DataTable, Field, Notice, Panel, Select, SubTabs, TextArea, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
@@ -192,7 +193,7 @@ export function ChecklistPanel({ auth }: { auth: AuthContext }) {
             rowKey={(r) => `${r.shiftId}|${r.checklistId}`}
             empty={t('chk.noPending')}
             columns={[
-              { key: 'submittedAt', label: t('kitchen.when'), render: (r) => (r.submittedAt ? new Date(String(r.submittedAt)).toLocaleString() : '') },
+              { key: 'submittedAt', label: t('kitchen.when'), render: (r) => fmtDateTime(r.submittedAt) },
               { key: 'checklistName', label: t('chk.checklist') },
               { key: 'outlet', label: t('checkout.outlet') },
               { key: 'filledBy', label: t('kitchen.by') },

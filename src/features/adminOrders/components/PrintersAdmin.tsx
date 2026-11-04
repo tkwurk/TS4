@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { fmtDateTime, fmtTimeOnly } from '@/lib/dates'
 import type { AuthContext } from '@/services/api'
 import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Select, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
@@ -138,7 +139,7 @@ export function PrintersAdmin({ auth }: { auth: AuthContext }) {
         <div className="actions">
           <Badge tone={unlock.pinConfigured ? 'ok' : 'neutral'}>{unlock.pinConfigured ? t('adm.pinConfigured') : t('adm.pinNotConfigured')}</Badge>
           <Badge tone={unlock.pinWindowActive ? 'ok' : 'neutral'}>
-            {unlock.pinWindowActive ? `${t('adm.windowActive')} ${unlock.activeUntil ? new Date(unlock.activeUntil).toLocaleTimeString() : ''}` : t('adm.windowInactive')}
+            {unlock.pinWindowActive ? `${t('adm.windowActive')} ${fmtTimeOnly(unlock.activeUntil)}` : t('adm.windowInactive')}
           </Badge>
         </div>
       )}
@@ -172,7 +173,7 @@ export function PrintersAdmin({ auth }: { auth: AuthContext }) {
           { key: 'printerType', label: t('adm.printerType') },
           { key: 'autoPrint', label: t('adm.autoPrint'), render: (r) => (r.autoPrint ? '✔' : '—') },
           { key: 'drawerPin', label: t('adm.drawerPinMode') },
-          { key: 'updatedBy', label: t('kitchen.by'), render: (r) => <>{String(r.updatedBy ?? '')}<div className="muted">{r.updatedAt ? new Date(String(r.updatedAt)).toLocaleString() : ''}</div></> },
+          { key: 'updatedBy', label: t('kitchen.by'), render: (r) => <>{String(r.updatedBy ?? '')}<div className="muted">{fmtDateTime(r.updatedAt)}</div></> },
         ]}
       />
     </Panel>

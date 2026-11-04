@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { localDate, localDateTime } from '@/lib/dates'
+import { fmtDateTime, localDate, localDateTime } from '@/lib/dates'
 import type { AuthContext } from '@/services/api'
 import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Stats, SubTabs, TextArea, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
@@ -345,7 +345,7 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
             rowKey={(r, i) => `${r.cookingId}-${i}`}
             empty={loadingHist ? t('common.loading') : t('kitchen.noHistory')}
             columns={[
-              { key: 'startTime', label: t('kitchen.start'), render: (r) => (r.startTime ? new Date(String(r.startTime)).toLocaleString() : '') },
+              { key: 'startTime', label: t('kitchen.start'), render: (r) => fmtDateTime(r.startTime) },
               { key: 'productName', label: t('kitchen.product') },
               { key: 'qty', label: t('kitchen.qty'), align: 'right' },
               { key: 'chef', label: t('kitchen.chef') },

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { localDate } from '@/lib/dates'
+import { fmtDateTime, localDate } from '@/lib/dates'
 import { callSecure } from '@/services/api'
 import type { AuthContext } from '@/services/api'
 import { Button, DataTable, Field, FormRow, Notice, Panel, Select, Stats, TextInput } from '@/components/ui'
@@ -158,7 +158,7 @@ export function AdminOrdersPanel({ auth }: { auth: AuthContext }) {
         rowKey={(r) => String(r.rowIndex)}
         empty={loading ? t('common.loading') : t('sales.none')}
         columns={[
-          { key: 'timestamp', label: t('kitchen.when'), render: (r) => new Date(String(r.timestamp)).toLocaleString() },
+          { key: 'timestamp', label: t('kitchen.when'), render: (r) => fmtDateTime(r.timestamp) },
           { key: 'orderNumber', label: t('orders.col.order') },
           { key: 'itemName', label: t('purch.product') },
           { key: 'qty', label: t('purch.qty'), align: 'right', render: numCell('qty') },

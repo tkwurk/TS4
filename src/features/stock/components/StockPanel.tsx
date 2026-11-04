@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { fmtDateOnly } from '@/lib/dates'
 import { callSecure } from '@/services/api'
 import type { AuthContext } from '@/services/api'
 import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Stats, TextInput } from '@/components/ui'
@@ -23,11 +24,7 @@ interface StockResult {
   historyIncomplete: boolean
 }
 
-const fmtDate = (v: string) => {
-  if (!v) return '—'
-  const d = new Date(v)
-  return isNaN(d.getTime()) ? v : d.toLocaleDateString()
-}
+const fmtDate = (v: string) => (v ? fmtDateOnly(v) : '—')
 
 /** Stock — current ledger totals (purchased − consumed − sold) per buy product for the outlet. */
 export function StockPanel({ auth }: { auth: AuthContext }) {
