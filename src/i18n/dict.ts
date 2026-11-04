@@ -241,6 +241,9 @@ export const dict: Record<Lang, Record<string, string>> = {
     'purch.receivedQty': 'Received qty',
     'purch.markReceived': 'Mark received',
     'purch.nothingToReceive': 'Nothing waiting to be received.',
+    'purch.unitPrice': 'Unit price',
+    'purch.enterTotal': 'Enter total',
+    'purch.deduction': 'DEDUCTION',
 
     'stock.products': 'Products',
     'stock.outOfStock': 'Out of stock',
@@ -719,6 +722,9 @@ export const dict: Record<Lang, Record<string, string>> = {
     'purch.receivedQty': 'Jml diterima',
     'purch.markReceived': 'Tandai diterima',
     'purch.nothingToReceive': 'Tidak ada barang menunggu diterima.',
+    'purch.unitPrice': 'Harga satuan',
+    'purch.enterTotal': 'Masukkan total',
+    'purch.deduction': 'POTONGAN',
 
     'stock.products': 'Produk',
     'stock.outOfStock': 'Stok habis',

@@ -43,6 +43,27 @@
   color: var(--text-h);
 }
 
+/* Spreadsheet-style inputs (Total / Unit price / Qty) */
+.ss-input {
+  width: 7.5rem;
+  padding: 0.35rem 0.5rem;
+  text-align: right;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font: inherit;
+}
+.ss-input--qty {
+  width: 4.5rem;
+}
+.ss-input:focus {
+  outline: 2px solid var(--accent, #7c3aed);
+  outline-offset: 1px;
+}
+.qty .ss-input--qty {
+  margin: 0 0.25rem;
+}
+
 @media (max-width: 900px) {
   .purch {
     flex-direction: column;

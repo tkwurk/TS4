@@ -71,6 +71,9 @@ function BuyPanel({
   const [submitting, setSubmitting] = useState(false)
   const [miscName, setMiscName] = useState('')
   const [miscPrice, setMiscPrice] = useState('')
+  // Per-row typed values for variable-quantity items (Total / Unit price / Qty), as in the
+  // original spreadsheet-style purchasing screen. The cart line is derived from these.
+  const [draft, setDraft] = useState<Record<string, { total: string; price: string; qty: string; totalTyped?: boolean }>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -116,7 +119,7 @@ function BuyPanel({
     buyUnitSize: str(p.BUYUNITSIZE),
     price: num(p.BUYPRICE) || num(p.PRICE),
     mode: local ? str(p.MODE) || 'L' : str(p.MODE),
-    isVariable: str(p.QUANTITYVARIABLE).toLowerCase() === 'yes',
+    isVariable: ['yes', 'y'].includes(str(p.QUANTITYVARIABLE).trim().toLowerCase()),
   })
 
   const lineOf = (key: string) => cart.find((c) => c.key === key)
@@ -132,6 +135,60 @@ function BuyPanel({
       const item = { ...base, qty: 0, ...patch } as PurchaseItem
       return item.qty > 0 ? [...prev, item] : prev
     })
+  const clearCart = () => {
+    setCart([])
+    setDraft({})
+  }
+  const removeLine = (key: string) => {
+    setLine(key, { qty: 0 })
+    setDraft((d) => {
+      const n = { ...d }
+      delete n[key]
+      return n
+    })
+  }
+
+  // VOUCHER products are deductions from the supplier bill (stored as negative price), as in the original.
+  const isVoucher = (name: string) => name.toUpperCase().includes('VOUCHER')
+  const signed = (name: string, absPrice: number) => (isVoucher(name) ? -Math.abs(absPrice) : Math.abs(absPrice))
+
+  /**
+   * Variable-quantity row edit. Mirrors handleSpreadsheet{Total,Price,Qty}Change:
+   *  - total typed  → price = total / qty (when qty > 0); total is now "user-entered"
+   *  - qty typed    → if the user entered a total, price = total / qty; otherwise total = qty × price
+   *  - price typed  → total = qty × price (total becomes derived again)
+   */
+  const editVariable = (base: Omit<PurchaseItem, 'qty'>, field: 'total' | 'price' | 'qty', value: string) => {
+    const cur = draft[base.key] ?? { total: '', price: '', qty: '', totalTyped: false }
+    const next = { ...cur, [field]: value }
+    const qty = parseFloat(next.qty) || 0
+    let price = Math.abs(parseFloat(next.price) || 0) || Math.abs(base.price)
+    const total = parseFloat(next.total) || 0
+
+    if (field === 'total') {
+      next.totalTyped = total > 0
+      if (total > 0 && qty > 0) {
+        price = Math.round(total / qty)
+        next.price = String(price)
+      }
+    } else if (field === 'qty') {
+      if (next.totalTyped && total > 0 && qty > 0) {
+        price = Math.round(total / qty)
+        next.price = String(price)
+      } else {
+        next.total = qty > 0 && price > 0 ? String(Math.round(qty * price)) : ''
+      }
+    } else {
+      next.totalTyped = false
+      next.total = qty > 0 && price > 0 ? String(Math.round(qty * price)) : ''
+    }
+
+    setDraft((d) => ({ ...d, [base.key]: next }))
+    setLine(base.key, { qty, price: signed(base.name, price) }, base)
+  }
+
+  const setRegularQty = (base: Omit<PurchaseItem, 'qty'>, qty: number) =>
+    setLine(base.key, { qty: Math.max(0, qty), price: signed(base.name, base.price) }, base)
 
   const addMisc = () => {
     const name = miscName.trim()
@@ -162,7 +219,7 @@ function BuyPanel({
     setSubmitting(false)
     if (r.ok) {
       setMsg({ tone: 'info', text: `${t('purch.saved')} — ${fmtMoney(total)}` })
-      setCart([])
+      clearCart()
       setStep('items')
     } else setMsg({ tone: 'error', text: r.error ?? '' })
   }
@@ -235,24 +292,64 @@ function BuyPanel({
                 rowKey={(r) => keyOf(r as BuyProduct)}
                 empty={t('purch.noProducts')}
                 columns={[
-                  { key: 'NAME', label: t('purch.product'), render: (r) => <>{str(r.NAME)}<div className="muted">{str(r.SUPPLIER)} · {str(r.BUYUNIT)}{r.BUYUNITSIZE ? ` ${str(r.BUYUNITSIZE)}` : ''}</div></> },
                   {
-                    key: 'price',
-                    label: t('purch.price'),
+                    key: 'NAME',
+                    label: t('purch.product'),
+                    render: (r) => (
+                      <>
+                        {str(r.NAME)}
+                        {isVoucher(str(r.NAME)) && <Badge tone="bad">{t('purch.deduction')}</Badge>}
+                        <div className="muted">
+                          {str(r.SUPPLIER)} · {str(r.BUYUNIT)}
+                          {r.BUYUNITSIZE ? ` ${str(r.BUYUNITSIZE)}` : ''}
+                        </div>
+                      </>
+                    ),
+                  },
+                  {
+                    key: 'total',
+                    label: t('inv.total'),
                     align: 'right',
                     render: (r) => {
-                      const p = r as BuyProduct
-                      const line = lineOf(keyOf(p))
-                      const base = toItem(p)
-                      const price = line?.price ?? base.price
-                      return base.isVariable ? (
-                        <span className="qty">
-                          <button type="button" onClick={() => setLine(base.key, { price: Math.max(0, price - 1000) }, base)}>−</button>
-                          {fmtMoney(price)}
-                          <button type="button" onClick={() => setLine(base.key, { price: price + 1000 }, base)}>+</button>
-                        </span>
-                      ) : (
-                        fmtMoney(price)
+                      const base = toItem(r as BuyProduct)
+                      const line = lineOf(base.key)
+                      if (!base.isVariable) {
+                        const tot = line ? line.qty * line.price : 0
+                        return tot ? <span style={{ color: tot < 0 ? '#dc2626' : undefined, fontWeight: 600 }}>{fmtMoney(Math.abs(tot))}</span> : ''
+                      }
+                      return (
+                        <input
+                          className="ss-input"
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          step={1000}
+                          placeholder={t('purch.enterTotal')}
+                          value={draft[base.key]?.total ?? (line ? String(Math.round(Math.abs(line.qty * line.price))) : '')}
+                          onChange={(e) => editVariable(base, 'total', e.target.value)}
+                        />
+                      )
+                    },
+                  },
+                  {
+                    key: 'price',
+                    label: t('purch.unitPrice'),
+                    align: 'right',
+                    render: (r) => {
+                      const base = toItem(r as BuyProduct)
+                      const line = lineOf(base.key)
+                      if (!base.isVariable) return fmtMoney(Math.abs(base.price))
+                      return (
+                        <input
+                          className="ss-input"
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          step={1}
+                          placeholder={String(Math.abs(base.price) || 0)}
+                          value={draft[base.key]?.price ?? (line ? String(Math.abs(line.price)) : '')}
+                          onChange={(e) => editVariable(base, 'price', e.target.value)}
+                        />
                       )
                     },
                   },
@@ -261,16 +358,37 @@ function BuyPanel({
                     label: t('purch.qty'),
                     align: 'right',
                     render: (r) => {
-                      const p = r as BuyProduct
-                      const base = toItem(p)
+                      const base = toItem(r as BuyProduct)
                       const line = lineOf(base.key)
-                      const step = base.isVariable ? 0.1 : 1
                       const qty = line?.qty ?? 0
+                      if (base.isVariable) {
+                        return (
+                          <input
+                            className="ss-input ss-input--qty"
+                            type="number"
+                            inputMode="decimal"
+                            min={0}
+                            step={0.1}
+                            placeholder="0"
+                            value={draft[base.key]?.qty ?? (line ? String(line.qty) : '')}
+                            onChange={(e) => editVariable(base, 'qty', e.target.value)}
+                          />
+                        )
+                      }
                       return (
                         <span className="qty">
-                          <button type="button" disabled={qty <= 0} onClick={() => setLine(base.key, { qty: parseFloat((qty - step).toFixed(1)) }, base)}>−</button>
-                          {qty}
-                          <button type="button" onClick={() => setLine(base.key, { qty: parseFloat((qty + step).toFixed(1)) }, base)}>+</button>
+                          <button type="button" disabled={qty <= 0} onClick={() => setRegularQty(base, qty - 1)}>−</button>
+                          <input
+                            className="ss-input ss-input--qty"
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            step={1}
+                            placeholder="0"
+                            value={qty > 0 ? String(qty) : ''}
+                            onChange={(e) => setRegularQty(base, parseFloat(e.target.value) || 0)}
+                          />
+                          <button type="button" onClick={() => setRegularQty(base, qty + 1)}>+</button>
                         </span>
                       )
                     },
@@ -320,8 +438,11 @@ function BuyPanel({
                         title={t('purch.expiry')}
                       />
                     </span>
-                    <span className="muted">{fmtMoney(c.price * c.qty)}</span>
-                    <button type="button" className="soldout-btn" onClick={() => setLine(c.key, { qty: 0 })} aria-label="Remove">
+                    <span className="muted" style={{ color: c.price < 0 ? '#dc2626' : undefined }}>
+                      {c.price < 0 ? '−' : ''}
+                      {fmtMoney(Math.abs(c.price * c.qty))}
+                    </span>
+                    <button type="button" className="soldout-btn" onClick={() => removeLine(c.key)} aria-label="Remove">
                       ✕
                     </button>
                   </li>
@@ -337,7 +458,7 @@ function BuyPanel({
                 💳 {t('checkout.proceed')}
               </Button>
               {cart.length > 0 && (
-                <Button variant="ghost" onClick={() => setCart([])}>
+                <Button variant="ghost" onClick={clearCart}>
                   {t('checkout.clear')}
                 </Button>
               )}
