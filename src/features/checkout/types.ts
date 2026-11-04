@@ -5,6 +5,137 @@ export interface CartItem {
   name: string
   price: number
   qty: number
+  category?: string
+  navCategory?: string
+  /** Sold-out line: excluded from total, saved to Missed Orders instead. */
+  isSoldOut?: boolean
+  /** Leftover: given away at price 0; originalPrice kept for reference. */
+  isLeftover?: boolean
+  originalPrice?: number
+  /** Variable-quantity product (QUANTITYVARIABLE=yes): fractional qty, adjustable price. */
+  isVariableQuantity?: boolean
+  /** Free-text item added via the custom-item form. */
+  isCustom?: boolean
+}
+
+/** Lines that are actually sold (not sold-out). */
+export const sellableItems = (items: CartItem[]) => items.filter((i) => !i.isSoldOut)
+export const missedItems = (items: CartItem[]) => items.filter((i) => i.isSoldOut)
+export const cartTotal = (items: CartItem[]) => sellableItems(items).reduce((s, i) => s + i.price * i.qty, 0)
+
+/** Active payment method row from the PaymentMethod sheet (via getPaymentMethodsSecure). */
+export interface PaymentMethod {
+  pn: string
+  name: string
+  destinationAccount: string
+  status: string
+  outlet: string
+  module: string
+  openDrawer?: boolean
+  autoDeposit?: boolean
+}
+
+export type DiscountMode = 'amount' | 'percent'
+
+export interface PaymentSplit {
+  method: string
+  amount: number
+  destinationAccount?: string
+  autoDeposit?: boolean
+}
+
+/** Everything the payment screen decides; mirrors the original ui_checkout.html pending order. */
+export interface PaymentDecision {
+  payment: string
+  destinationAccount?: string
+  autoDeposit?: boolean
+  discountMode: DiscountMode
+  discountValue: number
+  discount: number
+  subtotal: number
+  total: number
+  paymentSplits?: PaymentSplit[]
+  /** Cash handed over (cash method, or the cash leg of a split). */
+  cashTendered?: number
+  changeAmount?: number
+  /** Resolved from the method's Open Drawer flag; mirrors resolveOrderOpenCashDrawer. */
+  openCashDrawer: boolean
+}
+
+/**
+ * Mirrors paymentMethodOpensDrawer(): the sheet's Open Drawer column wins;
+ * otherwise only "cash" opens the drawer.
+ */
+export function methodOpensDrawer(name: string, methods: PaymentMethod[]): boolean {
+  const key = name.trim().toLowerCase()
+  const meta = methods.find((m) => m.name.trim().toLowerCase() === key)
+  if (meta && typeof meta.openDrawer === 'boolean') return meta.openDrawer
+  return key === 'cash'
+}
+
+/**
+ * Mirrors resolveOrderOpenCashDrawer(): never for a zero total; for splits only
+ * when there is a cash leg (> 0); otherwise by the chosen method.
+ */
+export function resolveOpenCashDrawer(
+  payment: string,
+  total: number,
+  splits: PaymentSplit[] | undefined,
+  methods: PaymentMethod[],
+): boolean {
+  if (!payment || total <= 0) return false
+  if (splits?.length) {
+    const cash = splits.filter((s) => isCashLike(s.method)).reduce((a, s) => a + s.amount, 0)
+    return cash > 0 && methodOpensDrawer('cash', methods)
+  }
+  return methodOpensDrawer(payment, methods)
+}
+
+/** Mirrors applyDiscountToOrder(): amount or percent, capped at the subtotal, rounded. */
+export function computeDiscount(subtotal: number, mode: DiscountMode, value: number): number {
+  if (!(value > 0) || !(subtotal > 0)) return 0
+  const raw = mode === 'percent' ? Math.min((subtotal * value) / 100, subtotal) : Math.min(value, subtotal)
+  return Math.max(0, Math.round(raw))
+}
+
+const CASH_LIKE = /^(cash|tunai)$/i
+export const isCashLike = (name: string) => CASH_LIKE.test(name.trim())
+
+/** Mirrors isFreePaymentMethodName_: "Free"/"Gratis" orders are fully discounted. */
+export const isFreeMethod = (name: string) => /free|gratis/i.test(name)
+
+/**
+ * Mirrors ui_checkout.html renderDynamicPaymentButtons(): a method is offered at
+ * checkout only if it is active (server-enforced), its Module column is empty
+ * (= all modules) or includes "selling" (comma-separated), and it is not one of
+ * the special partial/split keys.
+ */
+export function isSellingMethod(m: PaymentMethod): boolean {
+  const key = (m.name || '').trim().toLowerCase()
+  if (!key || key === 'partial' || key === 'split') return false
+  if ((m.status || '').trim().toLowerCase() !== 'active' && m.status) return false
+  const mod = (m.module || '').trim()
+  if (!mod) return true
+  return mod.split(',').some((s) => s.trim().toLowerCase() === 'selling')
+}
+
+/** Same icon map the original checkout used; falls back to a generic card. */
+const PAYMENT_ICONS: Record<string, string> = {
+  cash: '💵',
+  tunai: '💵',
+  bank: '🏦',
+  transfer: '🏦',
+  qris: '📱',
+  ovo: '💜',
+  gopay: '💚',
+  dana: '📲',
+  shopeepay: '🧡',
+  'credit card': '💳',
+  card: '💳',
+  debit: '💳',
+}
+export function paymentIcon(name: string): string {
+  return PAYMENT_ICONS[name.trim().toLowerCase()] ?? '💳'
 }
 
 /** Shape returned by the checkout.completed pipeline (apiOk data). */
@@ -43,6 +174,13 @@ export function productImage(row: ProductRow): string | null {
   if (!id) return null
   if (/^(https?:|data:)/i.test(id)) return id
   return `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w200`
+}
+
+/** Mirrors the original: QUANTITYVARIABLE = "yes" → fractional qty + adjustable price. */
+export function isVariableQuantityProduct(row: ProductRow): boolean {
+  const key = Object.keys(row).find((k) => k.toUpperCase().replace(/\s+/g, '') === 'QUANTITYVARIABLE')
+  const v = key ? row[key] : undefined
+  return v != null && String(v).trim().toLowerCase() === 'yes'
 }
 
 /** Best-effort supplier from a header-keyed product row. */

@@ -118,6 +118,13 @@ var RPC_ALLOWED = {
   getProducts: 1, getProductsWithOutletAndCategoryFilter: 1, getCookingProductsFromSheet: 1,
   // sales / orders
   saveOrderSecure: 1, saveMissedOrdersSecure: 1,
+  // payment methods / expenses (checkout discount)
+  getPaymentMethodsSecure: 1, recordExpenseSecure: 1,
+  // cash drawer (manual open with PIN) + audit
+  getDrawerUnlockStatusSecure: 1, validateDrawerUnlockPinSecure: 1,
+  authorizeCashDrawerOpenSecure: 1, logCashDrawerOpenSecure: 1,
+  // kitchen alerts shown on the ordering screen
+  getRecookAlertsSecure: 1,
   // purchases / inventory
   recordPurchaseSecure: 1, recordInventoryConsumptionSecure: 1,
   // reports
