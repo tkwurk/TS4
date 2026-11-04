@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useAuth, LoginPanel } from '@/features/auth'
 import { CheckoutPanel } from '@/features/checkout'
-import { AdminOrdersPanel } from '@/features/adminOrders'
+import { AdminPanel } from '@/features/adminOrders'
 import { PnlPanel, SalesReportPanel, UsagePanel } from '@/features/reports'
 import { KitchenPanel } from '@/features/kitchen'
 import { PurchasingPanel } from '@/features/purchasing'
@@ -67,7 +67,7 @@ function App() {
       case 'orders':
         return <CheckoutPanel session={session} />
       case 'adminOrders':
-        return <AdminOrdersPanel auth={auth} />
+        return <AdminPanel auth={auth} />
       case 'monthlySalesReport':
         return <SalesReportPanel auth={auth} />
       case 'kitchenCooking':

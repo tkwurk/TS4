@@ -118,7 +118,7 @@ export function AdminOrdersPanel({ auth }: { auth: AuthContext }) {
   }
 
   return (
-    <Panel title={`📋 ${t('nav.adminOrders')}`}>
+    <Panel title={`📋 ${t('adm.orders')}`}>
       <FormRow>
         <Field label={t('kitchen.from')}>
           <TextInput type="date" value={from} onChange={(e) => setFrom(e.target.value)} />

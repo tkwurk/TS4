@@ -146,6 +146,16 @@ var RPC_ALLOWED = {
   getPendingReviewQueue: 1, reviewChecklistShift: 1,
   // admin orders
   getOrdersForAdminSecure: 1, bulkUpdateOrdersSecure: 1, deleteOrderDataSecure: 1, getOutletsForAdminSecure: 1,
+  // admin panel: products / people / bom / printers / checklist admin / smart picks
+  getProductsForAdminSecure: 1, saveProductSecure: 1, updateProductFieldsSecure: 1, getMissingProductImagesSecure: 1,
+  getPeopleForAdminSecure: 1, savePersonSecure: 1, getTriggerHealthSecure: 1, clearAllUsersCacheSecure: 1,
+  getBomForAdminSecure: 1,
+  getOutletPrinterSecure: 1, saveOutletPrinterSecure: 1, deleteOutletPrinterSecure: 1, getAllPrintersSecure: 1,
+  saveOutletAutoPrintSecure: 1, saveOutletDrawerPinSecure: 1,
+  saveDrawerUnlockPinSecure: 1, activateDrawerUnlockPinSecure: 1, getDrawerUnlockAdminSecure: 1,
+  getAllChecklistDefinitions: 1, getChecklistRoleOptions: 1, saveChecklistDefinition: 1,
+  getAllChecklistQuestions: 1, saveChecklistQuestion: 1,
+  getSmartPicksTriggerInfoSecure: 1, scheduleSmartPicksTriggerSecure: 1, removeSmartPicksTriggerSecure: 1, refreshSmartPicksSecure: 1,
   // stock
   getStockTotalsSecure: 1,
   // purchases / inventory
