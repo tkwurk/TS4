@@ -66,6 +66,7 @@ function BuyPanel({
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('')
   const [cart, setCart] = useState<PurchaseItem[]>([])
+  const [cartOpen, setCartOpen] = useState(false)
   const [step, setStep] = useState<Step>('items')
   const [methods, setMethods] = useState<PaymentMethod[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -255,6 +256,16 @@ function BuyPanel({
       ) : (
         <div className="purch">
           <div className="purch__main">
+            <div className="purch__bar">
+              <button
+                type="button"
+                className="cart-toggle"
+                onClick={() => setCartOpen((o) => !o)}
+                aria-expanded={cartOpen}
+              >
+                🧾 {t('purch.cart')} <Badge tone={cart.length ? 'ok' : 'neutral'}>{cart.length}</Badge>
+              </button>
+            </div>
             <FormRow>
               <Field label={t('purch.account')}>
                 <Select value={account} onChange={(e) => setAccount(e.target.value)}>
@@ -415,10 +426,15 @@ function BuyPanel({
             )}
           </div>
 
-          <aside className="purch__cart">
-            <h3>
-              🧾 {t('purch.cart')} <Badge tone={cart.length ? 'ok' : 'neutral'}>{cart.length}</Badge>
-            </h3>
+          <aside className={'purch__cart' + (cartOpen ? '' : ' purch__cart--collapsed')}>
+            <div className="purch__cart-head">
+              <h3>
+                🧾 {t('purch.cart')} <Badge tone={cart.length ? 'ok' : 'neutral'}>{cart.length}</Badge>
+              </h3>
+              <button type="button" className="cart-collapse" onClick={() => setCartOpen(false)} aria-label="Collapse">
+                ›
+              </button>
+            </div>
             {cart.length === 0 ? (
               <p className="muted">{t('checkout.cartEmpty')}</p>
             ) : (
