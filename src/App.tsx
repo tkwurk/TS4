@@ -42,6 +42,7 @@ function App() {
   const { session, loading, error, login, logout } = useAuth()
   const { t } = useI18n()
   const [active, setActive] = useState('orders')
+  const [navOpen, setNavOpen] = useState(false)
 
   const navItems = useMemo(() => (session ? visibleNavItems(session) : []), [session])
 
@@ -102,6 +103,15 @@ function App() {
   return (
     <div className="shell">
       <header className="topbar">
+        <button
+          type="button"
+          className="topbar__menu"
+          aria-label={t('app.menu')}
+          aria-expanded={navOpen}
+          onClick={() => setNavOpen((v) => !v)}
+        >
+          ☰
+        </button>
         <h1 className="topbar__logo">TS4</h1>
         <div className="actions">
           <span className="status">
@@ -119,7 +129,12 @@ function App() {
         <Sidebar
           items={navItems.map((i) => ({ id: i.id, label: t(i.labelKey), icon: i.icon }))}
           active={currentId ?? ''}
-          onChange={setActive}
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
+          onChange={(id) => {
+            setActive(id)
+            setNavOpen(false)
+          }}
         />
         <section className="content">{renderScreen()}</section>
       </div>

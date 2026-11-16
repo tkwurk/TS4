@@ -9,6 +9,7 @@ export const dict: Record<Lang, Record<string, string>> = {
   en: {
     'app.subtitle': 'Point of sale · Google Sheets backend',
     'app.signOut': 'Sign out',
+    'app.menu': 'Menu',
     'app.language': 'Language',
 
     'login.title': 'Sign in',
@@ -494,6 +495,7 @@ export const dict: Record<Lang, Record<string, string>> = {
   id: {
     'app.subtitle': 'Kasir · Backend Google Sheets',
     'app.signOut': 'Keluar',
+    'app.menu': 'Menu',
     'app.language': 'Bahasa',
 
     'login.title': 'Masuk',
