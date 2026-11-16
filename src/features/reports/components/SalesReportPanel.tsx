@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { addDays, localDate } from '@/lib/dates'
+import { addDays, fmtTimeOnly, localDate } from '@/lib/dates'
 import type { AuthContext } from '@/services/api'
 import { Button, DataTable, Field, FormRow, Notice, Panel, Stats, SubTabs, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
 import { fetchOrderLines, fetchSalesSummary, type OrderLine, type SalesSummary } from '../reportsApi'
 
-type View = 'summary' | 'products' | 'lines'
+type View = 'products' | 'lines'
 const today = () => localDate()
 
 /** Daily sales — mirrors ui_showSalesSummary.html / ui_index.html (getSalesSummaryByDate + getOrderLinesByDate). */
 export function SalesReportPanel({ auth }: { auth: AuthContext }) {
   const { t, fmtMoney, fmtNum } = useI18n()
   const [date, setDate] = useState(today)
-  const [view, setView] = useState<View>('summary')
+  const [view, setView] = useState<View>('products')
   const [summary, setSummary] = useState<SalesSummary | null>(null)
   const [lines, setLines] = useState<OrderLine[]>([])
   const [loading, setLoading] = useState(false)
@@ -34,9 +34,16 @@ export function SalesReportPanel({ auth }: { auth: AuthContext }) {
 
   const products = useMemo(() => {
     const s = summary?.summary ?? {}
-    return Object.entries(s)
-      .map(([name, v]) => ({ name, qty: Number(v?.qty) || 0, total: Number(v?.total) || 0, category: String(v?.category ?? '') }))
-      .sort((a, b) => b.total - a.total)
+    const rows: { name: string; qty: number; total: number; category: string }[] = []
+    for (const [category, items] of Object.entries(s)) {
+      if (!items || typeof items !== 'object') continue
+      for (const [key, rec] of Object.entries(items)) {
+        const name =
+          rec?.itemName || (key.includes('_') ? key.split('_').slice(1).join('_').replace(/_/g, ' ') : key)
+        rows.push({ name, qty: Number(rec?.qty) || 0, total: Number(rec?.sales) || 0, category })
+      }
+    }
+    return rows.sort((a, b) => b.total - a.total)
   }, [summary])
 
   const shift = (days: number) => setDate(addDays(date, days))
@@ -73,7 +80,6 @@ export function SalesReportPanel({ auth }: { auth: AuthContext }) {
 
       <SubTabs
         tabs={[
-          { id: 'summary', label: t('sales.byPayment') },
           { id: 'products', label: t('sales.byProduct') },
           { id: 'lines', label: `${t('sales.lines')} (${lines.length})` },
         ]}
@@ -81,27 +87,19 @@ export function SalesReportPanel({ auth }: { auth: AuthContext }) {
         onChange={setView}
       />
 
-      {view === 'summary' && (
-        <DataTable
-          rows={Object.entries(summary?.salesByPaymentMethod ?? {}).map(([k, v]) => ({ k, v }))}
-          rowKey={(r) => String(r.k)}
-          empty={loading ? t('common.loading') : t('sales.none')}
-          columns={[
-            { key: 'k', label: t('checkout.payment') },
-            { key: 'v', label: t('inv.total'), align: 'right', render: (r) => fmtMoney(Number(r.v) || 0) },
-          ]}
-        />
-      )}
       {view === 'products' && (
         <DataTable
           rows={products as unknown as Record<string, unknown>[]}
-          rowKey={(r) => String(r.name)}
+          rowKey={(r) => `${r.category}:${r.name}`}
           empty={loading ? t('common.loading') : t('sales.none')}
+          defaultSort={{ key: 'category', dir: 'asc' }}
+          filterable
+          filterPlaceholder={t('sales.filter')}
           columns={[
-            { key: 'name', label: t('purch.product') },
-            { key: 'category', label: t('inv.category') },
-            { key: 'qty', label: t('purch.qty'), align: 'right', render: (r) => fmtNum(Number(r.qty) || 0) },
-            { key: 'total', label: t('inv.total'), align: 'right', render: (r) => fmtMoney(Number(r.total) || 0) },
+            { key: 'name', label: t('purch.product'), sortable: true },
+            { key: 'category', label: t('inv.category'), sortable: true },
+            { key: 'qty', label: t('purch.qty'), align: 'right', sortable: true, render: (r) => fmtNum(Number(r.qty) || 0) },
+            { key: 'total', label: t('inv.total'), align: 'right', sortable: true, render: (r) => fmtMoney(Number(r.total) || 0) },
           ]}
         />
       )}
@@ -110,14 +108,39 @@ export function SalesReportPanel({ auth }: { auth: AuthContext }) {
           rows={lines as unknown as Record<string, unknown>[]}
           rowKey={(_, i) => String(i)}
           empty={loading ? t('common.loading') : t('sales.none')}
+          defaultSort={{ key: 'time', dir: 'asc' }}
+          filterable
+          filterPlaceholder={t('sales.filter')}
           columns={[
-            { key: 'time', label: t('kitchen.when'), render: (r) => String(r.time ?? r.timestamp ?? '') },
-            { key: 'orderNumber', label: t('orders.col.order') },
-            { key: 'product', label: t('purch.product'), render: (r) => String(r.product ?? r.name ?? '') },
-            { key: 'qty', label: t('purch.qty'), align: 'right' },
-            { key: 'total', label: t('inv.total'), align: 'right', render: (r) => fmtMoney(Number(r.total) || 0) },
-            { key: 'payment', label: t('checkout.payment') },
-            { key: 'username', label: t('kitchen.by') },
+            {
+              key: 'time',
+              label: t('kitchen.when'),
+              sortable: true,
+              sortValue: (r) => String(r.time ?? r.timestamp ?? ''),
+              filterValue: (r) => fmtTimeOnly(r.time ?? r.timestamp),
+              render: (r) => fmtTimeOnly(r.time ?? r.timestamp),
+            },
+            { key: 'orderNumber', label: t('orders.col.order'), sortable: true },
+            {
+              key: 'product',
+              label: t('purch.product'),
+              sortable: true,
+              sortValue: (r) => String(r.productName ?? r.product ?? r.name ?? ''),
+              filterValue: (r) => String(r.productName ?? r.product ?? r.name ?? ''),
+              render: (r) => String(r.productName ?? r.product ?? r.name ?? ''),
+            },
+            { key: 'category', label: t('inv.category'), sortable: true },
+            { key: 'qty', label: t('purch.qty'), align: 'right', sortable: true },
+            {
+              key: 'total',
+              label: t('inv.total'),
+              align: 'right',
+              sortable: true,
+              sortValue: (r) => Number(r.lineTotal ?? r.total) || 0,
+              render: (r) => fmtMoney(Number(r.lineTotal ?? r.total) || 0),
+            },
+            { key: 'payment', label: t('checkout.payment'), sortable: true },
+            { key: 'username', label: t('kitchen.by'), sortable: true },
           ]}
         />
       )}

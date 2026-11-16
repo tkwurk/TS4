@@ -332,6 +332,7 @@ export const dict: Record<Lang, Record<string, string>> = {
     'sales.missed': 'Missed orders',
     'sales.none': 'No sales for this date.',
     'sales.failed': 'Could not load sales report.',
+    'sales.filter': 'Filter…',
 
     'att.morning': 'Morning',
     'att.evening': 'Evening',
@@ -816,6 +817,7 @@ export const dict: Record<Lang, Record<string, string>> = {
     'sales.missed': 'Pesanan terlewat',
     'sales.none': 'Tidak ada penjualan pada tanggal ini.',
     'sales.failed': 'Gagal memuat laporan penjualan.',
+    'sales.filter': 'Saring…',
 
     'att.morning': 'Pagi',
     'att.evening': 'Sore',

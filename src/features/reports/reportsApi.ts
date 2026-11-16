@@ -61,9 +61,20 @@ export async function fetchUsage(auth: AuthContext): Promise<UsageRow[]> {
 }
 
 // ── Sales by date ──
+/** One product row inside the nested summary (summary[category][itemKey]). */
+export interface SalesSummaryItem {
+  qty?: number
+  sales?: number
+  itemName?: string
+  productCode?: string
+  price?: number
+  isLeftover?: boolean
+  [k: string]: unknown
+}
 export interface SalesSummary {
   date: string
-  summary: Record<string, { qty?: number; total?: number; category?: string; [k: string]: unknown }>
+  /** Nested by category → itemKey → record (see getSalesSummaryByDate). */
+  summary: Record<string, Record<string, SalesSummaryItem>>
   totalSales: number
   totalSalesByCash: number
   totalSalesByNonCash: number
@@ -77,10 +88,17 @@ export interface SalesSummary {
 }
 export interface OrderLine {
   orderNumber?: string
+  /** Backend sends `timestamp` (ISO); `time` kept for legacy callers. */
+  timestamp?: string
   time?: string
+  /** Backend sends `productName`; `product`/`name` kept as fallbacks. */
+  productName?: string
   product?: string
+  name?: string
   qty?: number
   price?: number
+  /** Backend sends `lineTotal`; `total` kept as a fallback. */
+  lineTotal?: number
   total?: number
   category?: string
   payment?: string
