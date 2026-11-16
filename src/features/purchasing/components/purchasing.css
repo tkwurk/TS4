@@ -67,6 +67,7 @@
 @media (max-width: 900px) {
   .purch {
     flex-direction: column;
+    align-items: stretch;
   }
   .purch__cart {
     position: static;
