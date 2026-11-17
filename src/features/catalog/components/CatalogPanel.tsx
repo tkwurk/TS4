@@ -29,7 +29,7 @@ export function CatalogPanel() {
   const loadProducts = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const res = await fetchProducts({})
+    const res = await fetchProducts({}, undefined, true)
     setLoading(false)
     if (res.success && res.data) {
       setProducts(res.data.products ?? [])

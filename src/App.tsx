@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth, LoginPanel } from '@/features/auth'
+import { clearProductsCache, prefetchProducts } from '@/features/catalog'
 import { CheckoutPanel, clearPaymentMethodsCache, prefetchPaymentMethods } from '@/features/checkout'
 import { AdminPanel } from '@/features/adminOrders'
 import { PnlPanel, SalesReportPanel, UsagePanel } from '@/features/reports'
@@ -50,9 +51,11 @@ function App() {
   useEffect(() => {
     if (!sessionUser) {
       clearPaymentMethodsCache()
+      clearProductsCache()
       return
     }
     prefetchPaymentMethods({ username: sessionUser, deviceId: sessionDevice, outlet: sessionOutlet })
+    prefetchProducts(sessionOutlet)
   }, [sessionUser, sessionDevice, sessionOutlet])
 
   const navItems = useMemo(() => (session ? visibleNavItems(session) : []), [session])

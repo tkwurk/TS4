@@ -76,14 +76,17 @@ export function CheckoutPanel({ session }: { session: Session }) {
   const drawer = useDrawerOpen(auth)
   const recook = useRecookAlerts(auth, configured)
 
-  const loadProducts = useCallback(async () => {
-    setLoadingProducts(true)
-    setMessage(null)
-    const res = await fetchProducts(outlet ? { outlet } : {})
-    setLoadingProducts(false)
-    if (res.success && res.data) setProducts(res.data.products ?? [])
-    else setMessage({ tone: 'error', text: res.error ?? 'Failed to load products' })
-  }, [outlet])
+  const loadProducts = useCallback(
+    async (force = false) => {
+      setLoadingProducts(true)
+      setMessage(null)
+      const res = await fetchProducts(outlet ? { outlet } : {}, undefined, force)
+      setLoadingProducts(false)
+      if (res.success && res.data) setProducts(res.data.products ?? [])
+      else setMessage({ tone: 'error', text: res.error ?? 'Failed to load products' })
+    },
+    [outlet],
+  )
 
   useEffect(() => {
     clearCart()
@@ -260,7 +263,7 @@ export function CheckoutPanel({ session }: { session: Session }) {
               placeholder={t('checkout.search')}
               aria-label={t('checkout.search')}
             />
-            <Button variant="ghost" onClick={loadProducts} disabled={!configured || loadingProducts}>
+            <Button variant="ghost" onClick={() => loadProducts(true)} disabled={!configured || loadingProducts}>
               {loadingProducts ? t('common.loading') : t('checkout.reloadMenu')}
             </Button>
             <button
