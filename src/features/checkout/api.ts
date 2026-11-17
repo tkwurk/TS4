@@ -57,8 +57,12 @@ export async function fetchPaymentMethods(auth: AuthContext): Promise<PaymentMet
   return list ? list.filter(isSellingMethod) : null
 }
 
-/** Raw active methods from the sheet (all modules). */
-export async function fetchAllPaymentMethods(auth: AuthContext): Promise<PaymentMethod[] | null> {
+// Per-session cache: loaded once after login, reused by every module. Failures are not cached.
+let methodsCache: { key: string; promise: Promise<PaymentMethod[] | null> } | null = null
+
+const authKey = (auth: AuthContext) => `${auth.username}|${auth.outlet ?? ''}`
+
+async function loadPaymentMethods(auth: AuthContext): Promise<PaymentMethod[] | null> {
   const res = await rpc<unknown>('getPaymentMethodsSecure', [{ _authContext: auth }])
   if (!res.success) return null
   const d = res.data
@@ -67,6 +71,28 @@ export async function fetchAllPaymentMethods(auth: AuthContext): Promise<Payment
     return (d as { data: PaymentMethod[] }).data
   }
   return []
+}
+
+/** Raw active methods from the sheet (all modules), cached for the session. */
+export function fetchAllPaymentMethods(auth: AuthContext): Promise<PaymentMethod[] | null> {
+  const key = authKey(auth)
+  if (methodsCache?.key === key) return methodsCache.promise
+  const promise = loadPaymentMethods(auth).catch(() => null)
+  const entry = { key, promise }
+  methodsCache = entry
+  promise.then((list) => {
+    if (list === null && methodsCache === entry) methodsCache = null
+  })
+  return promise
+}
+
+/** Warm the cache right after login. */
+export function prefetchPaymentMethods(auth: AuthContext): void {
+  void fetchAllPaymentMethods(auth)
+}
+
+export function clearPaymentMethodsCache(): void {
+  methodsCache = null
 }
 
 /** Methods enabled for a given module (empty Module column = all modules), like _getCachedPaymentMethodsForModule. */

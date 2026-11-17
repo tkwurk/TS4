@@ -18,6 +18,8 @@ var WorkflowLog = {
   record: function (requestId, eventType, step, status, ctx) {
     var c = ctx || {};
     try { Logger.log('[WORKFLOW] ' + requestId + ' | ' + eventType + ' | ' + step + ' | ' + status); } catch (e) { /* ignore */ }
+    // Each sheet append is a slow round trip; skip routine step START/OK entries.
+    if (step !== 'pipeline' && (status === 'START' || status === 'OK')) return;
     try {
       var ss = getGlobalSpreadsheet();
       if (!ss) return;
@@ -42,7 +44,9 @@ var Orchestrator = {
 
   /** eventType -> ordered list of pipeline steps. */
   ROUTES: {
-    'checkout.completed': ['sales', 'inventory', 'reporting', 'reflection'],
+    // Checkout is latency-critical: only persist the order. The stock snapshot and
+    // daily-closing report are read-only and are served by stock.updated / report.requested.
+    'checkout.completed': ['sales'],
     'purchase.recorded':  ['restock', 'reporting', 'reflection'],
     'stock.updated':      ['inventory', 'reporting', 'reflection'],
     'report.requested':   ['reporting', 'reflection'],

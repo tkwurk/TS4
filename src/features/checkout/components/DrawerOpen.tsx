@@ -4,6 +4,7 @@ import { Button, Notice } from '@/components/ui'
 import { useI18n } from '@/i18n'
 import type { AuthContext } from '@/services/api'
 import { authorizeDrawerOpen, getDrawerStatus, logDrawerOpen, validateDrawerPin } from '../api'
+import { DRAWER_KICK, isAndroid, sendToRawBT } from '../escpos'
 import './drawer.css'
 
 type Phase = 'idle' | 'checking' | 'pin' | 'opening' | 'done'
@@ -20,6 +21,10 @@ export function useDrawerOpen(auth: AuthContext) {
   const [error, setError] = useState<string | null>(null)
 
   const kick = useCallback(() => {
+    if (isAndroid()) {
+      sendToRawBT([0x1b, 0x40, ...DRAWER_KICK])
+      return
+    }
     const host = document.getElementById('root') ?? document.body
     const el = document.createElement('div')
     el.className = 'drawer-kick-print'

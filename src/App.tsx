@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth, LoginPanel } from '@/features/auth'
-import { CheckoutPanel } from '@/features/checkout'
+import { CheckoutPanel, clearPaymentMethodsCache, prefetchPaymentMethods } from '@/features/checkout'
 import { AdminPanel } from '@/features/adminOrders'
 import { PnlPanel, SalesReportPanel, UsagePanel } from '@/features/reports'
 import { KitchenPanel } from '@/features/kitchen'
@@ -43,6 +43,17 @@ function App() {
   const { t } = useI18n()
   const [active, setActive] = useState('orders')
   const [navOpen, setNavOpen] = useState(false)
+
+  const sessionUser = session?.username
+  const sessionDevice = session?.deviceId
+  const sessionOutlet = session?.outlet
+  useEffect(() => {
+    if (!sessionUser) {
+      clearPaymentMethodsCache()
+      return
+    }
+    prefetchPaymentMethods({ username: sessionUser, deviceId: sessionDevice, outlet: sessionOutlet })
+  }, [sessionUser, sessionDevice, sessionOutlet])
 
   const navItems = useMemo(() => (session ? visibleNavItems(session) : []), [session])
 

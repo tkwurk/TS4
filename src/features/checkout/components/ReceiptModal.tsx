@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom'
 import { useI18n } from '@/i18n'
 import { Button } from '@/components/ui'
 import type { Receipt } from '../hooks/useLastReceipt'
+import { buildReceiptBytes, isAndroid, sendToRawBT } from '../escpos'
 import './receipt.css'
 
 /**
@@ -15,10 +16,31 @@ export function ReceiptModal({ receipt, onClose }: { receipt: Receipt; onClose: 
   const when = new Date(receipt.at)
   const host = document.getElementById('root') ?? document.body
 
+  const printRaw = () =>
+    sendToRawBT(
+      buildReceiptBytes(receipt, {
+        title: t('receipt.title'),
+        order: t('receipt.order'),
+        subtotal: t('receipt.subtotal'),
+        discount: t('receipt.discount'),
+        total: t('checkout.total'),
+        payment: t('checkout.payment'),
+        paid: t('receipt.paid'),
+        change: t('receipt.change'),
+        operator: t('checkout.operator'),
+        thanks: t('receipt.thanks'),
+      }),
+    )
+
   return createPortal(
     <div className="receipt-overlay" role="dialog" aria-modal="true">
       <div className="receipt-toolbar no-print">
-        <Button onClick={() => window.print()}>🖨️ {t('receipt.print')}</Button>
+        {isAndroid() && (
+          <Button onClick={printRaw}>🖨️ {t('receipt.print')} (RawBT)</Button>
+        )}
+        <Button variant={isAndroid() ? 'ghost' : undefined} onClick={() => window.print()}>
+          🖨️ {t('receipt.print')}
+        </Button>
         <Button variant="ghost" onClick={onClose}>
           ✕ {t('receipt.close')}
         </Button>
