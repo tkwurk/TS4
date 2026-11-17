@@ -51,7 +51,7 @@ export function CheckoutPanel({ session }: { session: Session }) {
   const [supplier, setSupplier] = useState('')
   const [category, setCategory] = useState('')
   const [search, setSearch] = useState('')
-  const [cartOpen, setCartOpen] = useState(true)
+  const [cartOpen, setCartOpen] = useState(false)
   const [parkedOpen, setParkedOpen] = useState(false)
   const [parkPromptOpen, setParkPromptOpen] = useState(false)
   const [parkIdentifier, setParkIdentifier] = useState('')
@@ -141,6 +141,7 @@ export function CheckoutPanel({ session }: { session: Session }) {
   const onProceed = useCallback(async () => {
     if (!cart.items.length) return setMessage({ tone: 'error', text: t('checkout.cartEmptyError') })
     setMessage(null)
+    setCartOpen(true)
     setStep('payment')
     if (!methods.length) {
       setLoadingMethods(true)

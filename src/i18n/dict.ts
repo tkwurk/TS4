@@ -158,6 +158,7 @@ export const dict: Record<Lang, Record<string, string>> = {
 
     'nav.soon': 'This screen is not migrated yet — coming soon.',
     'nav.orders': 'Checkout',
+    'nav.salesSummary': 'Sales summary',
     'nav.adminOrders': 'Admin',
     'nav.monthlySalesReport': 'Sales report',
     'nav.kitchenCooking': 'Kitchen',
@@ -644,6 +645,7 @@ export const dict: Record<Lang, Record<string, string>> = {
 
     'nav.soon': 'Layar ini belum dimigrasi — segera hadir.',
     'nav.orders': 'Kasir',
+    'nav.salesSummary': 'Ringkasan penjualan',
     'nav.adminOrders': 'Admin',
     'nav.monthlySalesReport': 'Laporan penjualan',
     'nav.kitchenCooking': 'Dapur',

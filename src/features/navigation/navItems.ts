@@ -13,6 +13,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { id: 'orders', labelKey: 'nav.orders', icon: '🧾', ready: true },
   { id: 'adminOrders', labelKey: 'nav.adminOrders', icon: '📋', ready: true },
+  { id: 'salesSummary', labelKey: 'nav.salesSummary', icon: '💹', ready: true },
   { id: 'monthlySalesReport', labelKey: 'nav.monthlySalesReport', icon: '📅', ready: true },
   { id: 'kitchenCooking', labelKey: 'nav.kitchenCooking', icon: '👨‍🍳', ready: true },
   { id: 'purchasing', labelKey: 'nav.purchasing', icon: '📦', ready: true },
