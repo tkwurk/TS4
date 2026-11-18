@@ -32,6 +32,7 @@ export function DataTable<T extends Record<string, unknown>>({
   defaultSort,
   filterable = false,
   filterPlaceholder,
+  columnFilters,
 }: {
   columns: Column<T>[]
   rows: T[]
@@ -42,6 +43,12 @@ export function DataTable<T extends Record<string, unknown>>({
   /** Show a search box that filters rows across all columns. */
   filterable?: boolean
   filterPlaceholder?: string
+  /** Controlled header inputs; the caller applies the filters. */
+  columnFilters?: {
+    values: Record<string, string>
+    onChange: (key: string, value: string) => void
+    label: (columnLabel: ReactNode) => string
+  }
 }) {
   const [sort, setSort] = useState<SortState | null>(defaultSort ?? null)
   const [query, setQuery] = useState('')
@@ -86,7 +93,7 @@ export function DataTable<T extends Record<string, unknown>>({
   const arrow = (key: string) => (sort?.key === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '')
 
   const table =
-    sorted.length === 0 ? (
+    sorted.length === 0 && !columnFilters ? (
       <p className="muted">{empty ?? '—'}</p>
     ) : (
       <div className="table-wrap">
@@ -107,6 +114,21 @@ export function DataTable<T extends Record<string, unknown>>({
                 </th>
               ))}
             </tr>
+            {columnFilters && (
+              <tr>
+                {columns.map((c) => (
+                  <th key={c.key}>
+                    <input
+                      className="table-column-filter"
+                      type="search"
+                      aria-label={columnFilters.label(c.label)}
+                      value={columnFilters.values[c.key] ?? ''}
+                      onChange={(e) => columnFilters.onChange(c.key, e.target.value)}
+                    />
+                  </th>
+                ))}
+              </tr>
+            )}
           </thead>
           <tbody>
             {sorted.map((r, i) => (
@@ -118,6 +140,9 @@ export function DataTable<T extends Record<string, unknown>>({
                 ))}
               </tr>
             ))}
+            {sorted.length === 0 && (
+              <tr><td colSpan={columns.length}>{empty ?? '—'}</td></tr>
+            )}
           </tbody>
         </table>
       </div>

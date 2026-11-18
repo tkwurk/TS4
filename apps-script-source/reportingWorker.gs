@@ -15,6 +15,110 @@
 // validation before it reaches the Orchestrator.
 var ReportingWorker = {
 
+  // Copilot: Return all purchase lines for the authenticated outlet, optionally grouped by product or Monday-based week.
+  purchaseHistory: function (params, ctx) {
+    var session = requirePermission_(params, params.local === true ? 'purchasingLocal' : 'purchasing');
+    var outlet = String(session.outlet || '').trim();
+    if (!outlet) throw new Error('Outlet is required for purchasing history.');
+    var groupBy = params.groupBy || 'none';
+    if (['none', 'product', 'week'].indexOf(groupBy) === -1) throw new Error('Invalid purchasing history grouping.');
+    var filters = params.filters || {};
+    if (typeof filters !== 'object' || Array.isArray(filters)) throw new Error('Invalid purchasing history filters.');
+    var allowedFilters = ['date', 'product', 'qty', 'unit', 'price', 'total', 'payment', 'username', 'pstatus', 'rquantity'];
+    Object.keys(filters).forEach(function (key) {
+      if (allowedFilters.indexOf(key) === -1 || typeof filters[key] !== 'string') {
+        throw new Error('Invalid purchasing history filter: ' + key);
+      }
+    });
+
+    var table = Repo.readTable('PURCHASES');
+    if (!table.headers.length) throw new Error('Purchases sheet is missing or has no headers.');
+    var field = ReportingWorker._field_;
+    var rows = [];
+    var tz = Session.getScriptTimeZone();
+    table.rows.forEach(function (r, index) {
+      if (String(field(r, 'Outlet') || '').trim().toLowerCase() !== outlet.toLowerCase()) return;
+      var product = String(field(r, 'Product Name', 'ProductName', 'Product', 'Item', 'Name') || '');
+      var purchaseId = String(field(r, 'Purchase ID', 'PurchaseID', 'ID') || '');
+      if (!product && !purchaseId) return;
+      var rawDate = field(r, 'Timestamp', 'Date');
+      var date = parseSheetDate_(rawDate);
+      var day = date ? Utilities.formatDate(date, tz, 'yyyy-MM-dd') : '';
+      var monday = '';
+      if (day) {
+        // Calendar arithmetic on the business date, not the instant's UTC weekday.
+        var calendar = new Date(day + 'T00:00:00Z');
+        calendar.setUTCDate(calendar.getUTCDate() - (calendar.getUTCDay() + 6) % 7);
+        monday = Utilities.formatDate(calendar, 'UTC', 'yyyy-MM-dd');
+      }
+      var payment = field(r, '_selectingPayment');
+      if (payment == null || String(payment).trim() === '') payment = field(r, 'Payment', 'Payment Method');
+      var purchase = {
+        rowIndex: index + 2,
+        purchaseId: purchaseId,
+        date: date ? date.toISOString() : String(rawDate || ''),
+        weekStart: monday,
+        product: product,
+        code: String(field(r, 'Product Code', 'ProductCode', 'Code') || ''),
+        supplier: String(field(r, 'Supplier') || ''),
+        outlet: outlet,
+        qty: Number(field(r, 'Quantity', 'Qty')) || 0,
+        unit: String(field(r, 'Buy Unit', 'BuyUnit', 'Unit') || ''),
+        price: Number(field(r, 'Price', 'Unit Price', 'Buy Price')) || 0,
+        total: Number(field(r, 'Total', 'Amount')) || 0,
+        account: String(field(r, 'Account', 'Expense Account') || ''),
+        payment: String(payment || ''),
+        username: String(field(r, 'Username', 'User')) || '',
+        pstatus: String(field(r, 'PSTATUS', 'Status') || ''),
+        rquantity: Number(field(r, 'RQUANTITY', 'Received Quantity')) || 0
+      };
+      var matches = Object.keys(filters).every(function (key) {
+        var query = filters[key].trim().toLowerCase();
+        if (!query) return true;
+        var values = [String(purchase[key] == null ? '' : purchase[key])];
+        if (key === 'date' && date) {
+          values.push(day, Utilities.formatDate(date, tz, 'dd/MM/yyyy'), Utilities.formatDate(date, tz, 'MM/dd/yyyy'),
+            Utilities.formatDate(date, tz, 'HH:mm'));
+        }
+        if (key === 'pstatus') {
+          if (purchase.pstatus.toUpperCase() === 'ORDERED') values.push('Ordered', 'Dipesan');
+          if (purchase.pstatus.toUpperCase() === 'RECEIVED') values.push('Received', 'Diterima');
+        }
+        return values.some(function (value) { return value.toLowerCase().indexOf(query) !== -1; });
+      });
+      if (matches) rows.push(purchase);
+    });
+    rows.sort(function (a, b) {
+      var ad = new Date(a.date).getTime() || 0;
+      var bd = new Date(b.date).getTime() || 0;
+      return bd - ad || b.rowIndex - a.rowIndex;
+    });
+
+    var groups = new Map();
+    var total = 0;
+    rows.forEach(function (row) {
+      var key = groupBy === 'week' ? row.weekStart
+        : groupBy === 'product' ? JSON.stringify([row.code || row.product, row.unit]) : 'all';
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key: key, product: groupBy === 'product' ? row.product : '',
+          code: groupBy === 'product' ? row.code : '',
+          unit: groupBy === 'product' ? row.unit : '',
+          weekStart: groupBy === 'week' ? row.weekStart : '',
+          rows: [], total: 0
+        });
+      }
+      var group = groups.get(key);
+      group.rows.push(row);
+      group.total += row.total;
+      total += row.total;
+    });
+    var list = Array.from(groups.values());
+    if (groupBy === 'product') list.sort(function (a, b) { return a.product.localeCompare(b.product); });
+    if (groupBy === 'week') list.sort(function (a, b) { return b.weekStart.localeCompare(a.weekStart); });
+    return apiOk({ groups: list, count: rows.length, total: total }, 'PURCHASE_HISTORY_OK');
+  },
+
   /**
    * Produces a report by type, delegating to existing analytics.
    * @param {string} type one of 'pnl' | 'cash' | 'sales' | 'dailyClosing'

@@ -193,6 +193,13 @@
   border-color: var(--accent);
 }
 
+.table-column-filter {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 6rem;
+  font: inherit;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;

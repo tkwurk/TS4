@@ -43,6 +43,9 @@ Data (Google Sheets today)            → swappable for Firestore / Postgres lat
   direct-write path in `src/services/google/sheets.ts` is **deprecated** — do not
   extend or reintroduce it.
 - **MUST NOT** put business logic, pricing, permissions, or reconciliation in the client.
+- Purchasing History may filter already-authorized rows locally and sum their
+  existing line totals for display only. These derived totals are not
+  authoritative and must never be used for writes, pricing, or reconciliation.
 - **MUST NOT** put business logic in the **Orchestrator** (routing / workflow
   state / logging only).
 - **MUST NOT** bypass `Repo` to touch `SpreadsheetApp` inside a worker.

@@ -23,6 +23,7 @@ export interface AuthContext {
 export type ApiEventType =
   | 'checkout.completed'
   | 'purchase.recorded'
+  | 'purchase.history.requested'
   | 'stock.updated'
   | 'report.requested'
   | 'catalog.requested'

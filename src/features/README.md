@@ -17,6 +17,38 @@ features/
 
 Existing examples: `auth/`, `checkout/`, `catalog/`, `reports/`.
 
+## Miscellaneous purchases
+
+Purchasing and Local Buy accept manual items with description, category,
+quantity, unit price, and optional expiry. They are saved as ordered purchase
+lines and can be received through the existing Receive screen. The server
+validates manual lines and writes purchases through `Repo`; both the purchase
+data and investment flag are appended together.
+
+## Purchasing history
+
+Purchasing and Local Buy include a **Purchasing History** sub-tab listing all
+purchase lines for the authenticated outlet, including ordered, received, and
+local purchases without a date limit. Column headings sort the displayed lines.
+Users can group by product (code and buy unit are kept separate) or by
+Monday-Sunday week in the Apps Script project timezone. Unfiltered group and
+overall amounts are calculated server-side.
+Text filters under the column headings apply together across all groups when
+**Apply filters** is selected. Counts and totals reflect matching lines; **Clear
+filters** restores the full report. Filtering and summing existing line totals
+for this display happen locally, without another request. These display totals
+are not authoritative and must not be used for writes or reconciliation. Refresh
+or changing the grouping still requests the current server report. Dates can be filtered by business-local
+`YYYY-MM-DD`, `DD/MM/YYYY`, `MM/DD/YYYY`, or time (`HH:mm`), and numeric filters
+match the unformatted value.
+
+History uses `purchase.history.requested` through the Orchestrator to
+`ReportingWorker.purchaseHistory`, which checks the screen permission and reads
+`PURCHASES` through `Repo`. Deploy the updated Apps Script backend alongside the
+PWA; the new event is not available in older backend deployments.
+Run the read-only endpoint regression tests with
+`node --test scripts/purchasing-history.test.cjs`.
+
 ## Migration guide (Apps Script -> TypeScript)
 
 The client never calls Google Sheets directly. It calls the Apps Script backend

@@ -39,34 +39,44 @@ function parsePurchaseDate(dateString) {
   return date;
 }
 
-/** Finds (or appends) the purchase "Is Investment" and "Source Account" columns. */
-function ensurePurchaseInvestmentColumns_(sheet) {
-  var lastCol = sheet.getLastColumn();
-  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  var investCol = -1;
-  var sourceCol = -1;
-  for (var i = 0; i < headers.length; i++) {
-    var h = String(headers[i] || '');
-    if (investCol === -1 && /is\s*investment/i.test(h)) investCol = i + 1;
-    if (sourceCol === -1 && /source\s*account/i.test(h)) sourceCol = i + 1;
+function purchaseColumnLetter_(index) {
+  var letters = '';
+  for (var n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) {
+    letters = String.fromCharCode(65 + (n - 1) % 26) + letters;
   }
-  if (investCol === -1) {
-    investCol = sheet.getLastColumn() + 1;
-    sheet.getRange(1, investCol).setValue('Is Investment');
+  return letters;
+}
+
+function purchaseAccountType_(account) {
+  var table = Repo.readTable('ACCOUNTS');
+  var cols = buildColumnMap(table.headers, 'ACCOUNTS');
+  if (cols.NAME < 0 || cols.TYPE < 0) throw new Error('Accounts sheet is missing name or type columns.');
+  var nameHeader = table.headers[cols.NAME], typeHeader = table.headers[cols.TYPE];
+  var key = normalizeAccountNameKey_(account), type = '';
+  table.rows.forEach(function (row) {
+    if (normalizeAccountNameKey_(row[nameHeader]) === key) type = String(row[typeHeader] || '').trim();
+  });
+  return type;
+}
+
+function validateMiscPurchaseItem_(item) {
+  var name = typeof item.productName === 'string' ? item.productName.trim() : '';
+  if (name.length < 2 || name.length > 50) throw new Error('Misc description must be 2 to 50 characters.');
+  if (!isFinite(Number(item.qty)) || Number(item.qty) <= 0) throw new Error('Misc quantity must be greater than zero.');
+  if (!isFinite(Number(item.price)) || Number(item.price) <= 0) throw new Error('Misc unit price must be greater than zero.');
+  if (typeof item.category !== 'string' || !item.category.trim()) throw new Error('Misc category is required.');
+  var expiry = item.expiryDate || '';
+  if (expiry) {
+    var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(expiry);
+    if (!match) throw new Error('Invalid misc expiry date.');
+    var date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+    if (date.getUTCFullYear() !== Number(match[1]) || date.getUTCMonth() + 1 !== Number(match[2]) ||
+        date.getUTCDate() !== Number(match[3])) throw new Error('Invalid misc expiry date.');
   }
-  if (sourceCol === -1) {
-    sourceCol = sheet.getLastColumn() + 1;
-    sheet.getRange(1, sourceCol).setValue('Source Account');
-  }
-  return { investCol: investCol, sourceCol: sourceCol };
 }
 
 function recordPurchase(purchase) {
   try {
-    const sheet = getGlobalSpreadsheet().getSheetByName(SHEETS.PURCHASES);
-    if (!sheet) {
-      return apiFail('Purchases sheet not found.', 'PURCHASE_SHEET_MISSING');
-    }
     if (typeof purchase === 'string') purchase = JSON.parse(purchase);
 
     const { deviceId, username } = purchase;
@@ -78,20 +88,14 @@ function recordPurchase(purchase) {
     const timestamp = new Date();
     const purchaseId = purchase.id || (timestamp.getTime() + '_' + Math.random().toString(36).substr(2, 9));
 
-    const existingData = sheet.getDataRange().getValues();
-    const headers = existingData[0] || [];
-    const purchaseIdIdx = headers.findIndex(h => /purchase.*id|id/i.test(h));
-
-    if (purchaseIdIdx !== -1) {
-      const existingIds = existingData.slice(1).map(row => row[purchaseIdIdx]);
-      if (existingIds.includes(purchaseId)) {
-        return apiFail('Duplicate purchase detected. Please try again.', 'PURCHASE_DUPLICATE');
-      }
-    }
-
-    if (!purchase.items || !purchase.items.length) {
+    if (!Array.isArray(purchase.items) || !purchase.items.length) {
       return apiFail('No items in purchase', 'PURCHASE_EMPTY');
     }
+    purchase.items.forEach(function (item) {
+      if (!item || typeof item !== 'object') throw new Error('Invalid purchase item.');
+      if (item.isMisc === true) validateMiscPurchaseItem_(item);
+    });
+    const isInvestment = purchaseAccountType_(purchase.account).toLowerCase() === 'investment';
 
     const rows = [];
     purchase.items.forEach((item) => {
@@ -120,25 +124,36 @@ function recordPurchase(purchase) {
       ]);
     });
 
-    const invCols = ensurePurchaseInvestmentColumns_(sheet);
-    // Investment is derived automatically from the selected account's type:
-    // an account of type "Investment" (in the Accounts sheet) marks the purchase
-    // as capital, so P&L and cash-in-hand exclude it. Any other type (e.g.
-    // "Expense") is a normal purchase.
-    const accountType = getAccountTypeForName_(purchase.account);
-    const isInvestment = String(accountType || '').trim().toLowerCase() === 'investment';
-    const firstNewRow = sheet.getLastRow() + 1;
-    appendRowsAtomic_(sheet, rows);
-
-    // Write the investment flag for the rows just added. It lives in a dedicated
-    // trailing column so P&L and cash-in-hand can exclude investment purchases.
-    const invVal = isInvestment ? 'Y' : '';
-    const srcVal = '';
-    const invCells = [];
-    const srcCells = [];
-    for (let ri = 0; ri < rows.length; ri++) { invCells.push([invVal]); srcCells.push([srcVal]); }
-    sheet.getRange(firstNewRow, invCols.investCol, rows.length, 1).setValues(invCells);
-    sheet.getRange(firstNewRow, invCols.sourceCol, rows.length, 1).setValues(srcCells);
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    try {
+      const table = Repo.readTable('PURCHASES');
+      const headers = table.headers.slice();
+      if (!headers.length) return apiFail('Purchases sheet not found or has no headers.', 'PURCHASE_SHEET_MISSING');
+      if (headers.length < 20) throw new Error('Purchases sheet requires at least 20 columns.');
+      const purchaseIdIdx = headers.findIndex(h => /purchase.*id|id/i.test(h));
+      if (purchaseIdIdx !== -1 && table.rows.some(row => row[headers[purchaseIdIdx]] === purchaseId)) {
+        return apiFail('Duplicate purchase detected. Please try again.', 'PURCHASE_DUPLICATE');
+      }
+      var investIdx = headers.findIndex(h => /is\s*investment/i.test(h));
+      var sourceIdx = headers.findIndex(h => /source\s*account/i.test(h));
+      const oldLength = headers.length;
+      if (investIdx === -1) { investIdx = headers.length; headers.push('Is Investment'); }
+      if (sourceIdx === -1) { sourceIdx = headers.length; headers.push('Source Account'); }
+      if (headers.length !== oldLength) {
+        Repo.updateRange('PURCHASES', purchaseColumnLetter_(oldLength) + '1:' + purchaseColumnLetter_(headers.length - 1) + '1',
+          [headers.slice(oldLength)]);
+      }
+      const completeRows = rows.map(function (row) {
+        while (row.length < headers.length) row.push('');
+        row[investIdx] = isInvestment ? 'Y' : '';
+        row[sourceIdx] = '';
+        return row;
+      });
+      Repo.appendRows('PURCHASES', completeRows);
+    } finally {
+      lock.releaseLock();
+    }
 
     invalidatePnLCache_(session.outlet);
     return apiOk({ purchaseId: purchaseId, message: 'Purchase recorded successfully' }, 'PURCHASE_SAVED');
@@ -723,15 +738,18 @@ function recordPurchaseSecure(params) {
     var purchase = params;
     var authContext = params._authContext;
 
-    if (!authContext || !authContext.username || !authContext.outlet) {
-      return apiFail('Authentication required: Missing username or outlet information', 'PURCHASE_AUTH_INVALID');
+    var session = requireAuth_(params);
+    var tabs = resolveEffectiveTabsFromSession(session);
+    if (tabs.indexOf('*') < 0 && tabs.indexOf('purchasing') < 0 && tabs.indexOf('purchasingLocal') < 0) {
+      return apiFail('Permission denied: purchasing', 'PURCHASE_FORBIDDEN');
     }
+    if (!session.outlet) return apiFail('Outlet is required to record a purchase.', 'PURCHASE_AUTH_INVALID');
 
     const purchaseWithAuth = {
       ...purchase,
       deviceId: authContext.deviceId,
-      username: authContext.username,
-      outlet: authContext.outlet
+      username: session.username,
+      outlet: session.outlet
     };
 
     return recordPurchase(purchaseWithAuth);

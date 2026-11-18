@@ -43,6 +43,10 @@
   color: var(--text-h);
 }
 
+.purch-history__group {
+  margin-top: 1.25rem;
+}
+
 /* Spreadsheet-style inputs (Total / Unit price / Qty) */
 .ss-input {
   width: 7.5rem;

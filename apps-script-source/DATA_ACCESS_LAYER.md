@@ -50,6 +50,12 @@ Repo.appendRows('AUDIT_LOG', [[ new Date(), 'checkout', 'ok' ]]);
 Repo.updateRange('ORDERS', 'G2:G2', [[ 'PAID' ]]);
 ```
 
+The purchase-save path reads account types and purchase rows through `Repo` and
+appends purchase lines with their investment flag in the same write. It preserves
+the legacy 20-column purchase layout, adding investment headers as needed, and
+locks the duplicate check and append. Other legacy purchasing operations have
+not yet been migrated.
+
 ## Migration path
 
 - **Incremental:** new features read/write only through `Repo`. Existing workers

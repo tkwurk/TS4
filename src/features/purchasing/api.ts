@@ -1,5 +1,5 @@
-import { callPositional, callSecure, rpc } from '@/services/api'
-import type { AuthContext } from '@/services/api'
+import { callApi, callPositional, callSecure, rpc } from '@/services/api'
+import type { ApiEnvelope, AuthContext } from '@/services/api'
 
 /** Normalized product row (keys upper-cased, spaces removed — as the original UI did). */
 export type BuyProduct = Record<string, unknown> & {
@@ -51,6 +51,46 @@ export interface Account {
   name: string
   type?: string
   [k: string]: unknown
+}
+
+export type PurchaseHistoryGrouping = 'none' | 'product' | 'week'
+export type PurchaseHistoryFilters = Partial<Record<'date' | 'product' | 'qty' | 'unit' | 'price' | 'total' | 'payment' | 'username' | 'pstatus' | 'rquantity', string>>
+
+export type PurchaseHistoryRow = Record<string, unknown> & OrderedPurchase & {
+  weekStart: string
+  code: string
+  unit: string
+  price: number
+  total: number
+  account: string
+  payment: string
+  username: string
+}
+
+export interface PurchaseHistory {
+  groups: {
+    key: string
+    product: string
+    code: string
+    unit: string
+    weekStart: string
+    rows: PurchaseHistoryRow[]
+    total: number
+  }[]
+  count: number
+  total: number
+}
+
+export async function fetchPurchaseHistory(auth: AuthContext, local: boolean, groupBy: PurchaseHistoryGrouping) {
+  const res = await callApi<{ steps: { purchaseHistory: ApiEnvelope<PurchaseHistory> } }>(
+    'purchase.history.requested', { local, groupBy }, auth,
+  )
+  if (!res.success) throw new Error(res.error || 'Unable to load purchasing history.')
+  const step = res.data?.steps?.purchaseHistory
+  if (!step?.success || !step.data || !Array.isArray(step.data.groups)) {
+    throw new Error(step?.error || 'Invalid purchasing history response.')
+  }
+  return step.data
 }
 
 function normalize(p: Record<string, unknown>): BuyProduct {
@@ -110,6 +150,7 @@ export function recordPurchase(
     buyUnitSize: i.buyUnitSize,
     expiryDate: i.expiryDate ?? '',
     mode: i.mode ?? '',
+    isMisc: i.isMisc === true,
   }))
   const total = items.reduce((s, i) => s + i.price * i.qty, 0)
   return callSecure<{ purchaseId?: string }>(

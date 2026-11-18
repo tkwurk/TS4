@@ -48,6 +48,7 @@ var Orchestrator = {
     // daily-closing report are read-only and are served by stock.updated / report.requested.
     'checkout.completed': ['sales'],
     'purchase.recorded':  ['restock', 'reporting', 'reflection'],
+    'purchase.history.requested': ['purchaseHistory'],
     'stock.updated':      ['inventory', 'reporting', 'reflection'],
     'report.requested':   ['reporting', 'reflection'],
     'catalog.requested':  ['catalog']
@@ -58,6 +59,7 @@ var Orchestrator = {
     sales:      function (payload, ctx, bag) { return SalesWorker.handleCheckout(payload, ctx); },
     inventory:  function (payload, ctx, bag) { return InventoryWorker.updateStock(payload, ctx); },
     restock:    function (payload, ctx, bag) { return InventoryWorker.restock(payload, ctx); },
+    purchaseHistory: function (payload, ctx, bag) { return ReportingWorker.purchaseHistory(payload, ctx); },
     reporting:  function (payload, ctx, bag) { return ReportingWorker.generateReport((payload && payload.reportType) || 'dailyClosing', payload, ctx); },
     reflection: function (payload, ctx, bag) { return ReflectionAgent.validate(bag.reporting, ctx); },
     catalog:    function (payload, ctx, bag) { return InventoryWorker.listProducts(ctx, payload); }

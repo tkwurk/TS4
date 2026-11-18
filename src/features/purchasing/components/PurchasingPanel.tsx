@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AuthContext } from '@/services/api'
-import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Select, TextInput } from '@/components/ui'
+import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Select, SubTabs, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
 import { fetchPaymentMethodsForModule, paymentIcon } from '@/features/checkout'
 import type { PaymentMethod } from '@/features/checkout'
+import { PurchasingHistoryPanel } from './PurchasingHistoryPanel'
 import {
   fetchAllProducts,
   fetchExpenseAccounts,
@@ -36,10 +37,26 @@ const num = (v: unknown) => Number(v) || 0
 export function PurchasingPanel({ auth, mode }: { auth: AuthContext; mode: PurchasingMode }) {
   const { t, fmtMoney, fmtNum } = useI18n()
   const [msg, setMsg] = useState<Msg | null>(null)
+  const [tab, setTab] = useState<'buy' | 'history'>('buy')
 
   if (mode === 'receive') return <ReceivePanel auth={auth} />
 
-  return <BuyPanel auth={auth} local={mode === 'local'} msg={msg} setMsg={setMsg} t={t} fmtMoney={fmtMoney} fmtNum={fmtNum} />
+  return (
+    <>
+      <SubTabs
+        tabs={[
+          { id: 'buy', label: t(mode === 'local' ? 'nav.purchasingLocal' : 'nav.purchasing') },
+          { id: 'history', label: t('purch.history') },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
+      <div hidden={tab !== 'buy'}>
+        <BuyPanel auth={auth} local={mode === 'local'} msg={msg} setMsg={setMsg} t={t} fmtMoney={fmtMoney} fmtNum={fmtNum} />
+      </div>
+      {tab === 'history' && <PurchasingHistoryPanel auth={auth} local={mode === 'local'} />}
+    </>
+  )
 }
 
 function BuyPanel({
@@ -72,6 +89,10 @@ function BuyPanel({
   const [submitting, setSubmitting] = useState(false)
   const [miscName, setMiscName] = useState('')
   const [miscPrice, setMiscPrice] = useState('')
+  const [miscQty, setMiscQty] = useState('1')
+  const [miscCategory, setMiscCategory] = useState('')
+  const [miscExpiry, setMiscExpiry] = useState('')
+  const miscSequence = useRef(0)
   // Per-row typed values for variable-quantity items (Total / Unit price / Qty), as in the
   // original spreadsheet-style purchasing screen. The cart line is derived from these.
   const [draft, setDraft] = useState<Record<string, { total: string; price: string; qty: string; totalTyped?: boolean }>>({})
@@ -193,15 +214,25 @@ function BuyPanel({
 
   const addMisc = () => {
     const name = miscName.trim()
-    const price = parseFloat(miscPrice) || 0
+    const price = Number(miscPrice)
+    const qty = Number(miscQty)
+    const category = miscCategory.trim()
     if (name.length < 2) return setMsg({ tone: 'error', text: t('custom.invalidName') })
-    if (price <= 0) return setMsg({ tone: 'error', text: t('custom.invalidPrice') })
-    const key = `misc::${name.toLowerCase()}::${price}`
-    setLine(key, { qty: (lineOf(key)?.qty ?? 0) + 1 }, {
-      key, name, productName: name, code: '', category: 'Local Misc', supplier: '', buyUnit: '', buyUnitSize: '', price, mode: 'L', isMisc: true,
+    if (!Number.isFinite(price) || price <= 0) return setMsg({ tone: 'error', text: t('custom.invalidPrice') })
+    if (!Number.isFinite(qty) || qty <= 0) return setMsg({ tone: 'error', text: t('purch.invalidMiscQty') })
+    if (!category) return setMsg({ tone: 'error', text: t('purch.invalidMiscCategory') })
+    const key = `misc::${++miscSequence.current}`
+    setLine(key, { qty }, {
+      key, name, productName: name, code: '', category, supplier: '', buyUnit: '', buyUnitSize: '', price,
+      expiryDate: miscExpiry, mode: local ? 'L' : '', isMisc: true,
     })
     setMiscName('')
     setMiscPrice('')
+    setMiscQty('1')
+    setMiscCategory('')
+    setMiscExpiry('')
+    setMsg(null)
+    setCartOpen(true)
   }
 
   const total = cart.reduce((s, c) => s + c.price * c.qty, 0)
@@ -408,7 +439,6 @@ function BuyPanel({
               />
             )}
 
-            {local && (
               <form
                 className="custom-item"
                 onSubmit={(e) => {
@@ -417,13 +447,25 @@ function BuyPanel({
                 }}
               >
                 <h4 className="menu-cat">✏️ {t('purch.misc')}</h4>
-                <div className="custom-item__row">
-                  <input value={miscName} onChange={(e) => setMiscName(e.target.value)} placeholder={t('custom.name')} maxLength={50} />
-                  <input type="number" inputMode="numeric" min={0} step={1000} value={miscPrice} onChange={(e) => setMiscPrice(e.target.value)} placeholder={t('custom.price')} />
-                  <Button type="submit">＋ {t('custom.add')}</Button>
-                </div>
+                <FormRow>
+                  <Field label={t('purch.miscDescription')}>
+                    <TextInput value={miscName} onChange={(e) => setMiscName(e.target.value)} maxLength={50} required />
+                  </Field>
+                  <Field label={t('purch.miscCategory')}>
+                    <TextInput value={miscCategory} onChange={(e) => setMiscCategory(e.target.value)} required />
+                  </Field>
+                  <Field label={t('purch.qty')}>
+                    <TextInput type="number" inputMode="decimal" min="0.000001" step="any" value={miscQty} onChange={(e) => setMiscQty(e.target.value)} required />
+                  </Field>
+                  <Field label={t('purch.unitPrice')}>
+                    <TextInput type="number" inputMode="decimal" min="0.000001" step="any" value={miscPrice} onChange={(e) => setMiscPrice(e.target.value)} required />
+                  </Field>
+                  <Field label={t('purch.expiry')}>
+                    <TextInput type="date" value={miscExpiry} onChange={(e) => setMiscExpiry(e.target.value)} />
+                  </Field>
+                </FormRow>
+                <Button type="submit">＋ {t('custom.add')}</Button>
               </form>
-            )}
           </div>
 
           <aside className={'purch__cart' + (cartOpen ? '' : ' purch__cart--collapsed')}>
@@ -446,6 +488,7 @@ function BuyPanel({
                       <div className="muted">
                         {fmtNum(c.qty)} × {fmtMoney(c.price)}
                       </div>
+                      {c.isMisc && <div className="muted">{c.category}</div>}
                       <input
                         type="date"
                         className="purch__expiry"
