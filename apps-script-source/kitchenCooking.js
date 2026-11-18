@@ -1069,15 +1069,22 @@ function getCookingHistorySecure(params) {
     var sheet = getGlobalSpreadsheet().getSheetByName(SHEETS.KITCHEN_COOKING);
     if (!sheet || sheet.getLastRow() < 2) return sanitizeForClient({ success: true, rows: [] });
 
-    var data = sheet.getDataRange().getValues();
+    var startDate = _parseHistoryFilterStart_(params.startDate);
+    var endDate = _parseHistoryFilterEnd_(params.endDate);
+    // Date-bounded: binary-search the (ascending) sheet instead of reading it all; helper falls back to a full read.
+    var data;
+    if (startDate && endDate) {
+      var part = readRowsForDay_(sheet, /start/i, startDate, endDate);
+      data = [part.headers].concat(part.rows);
+    } else {
+      data = sheet.getDataRange().getValues();
+    }
     var idx = _kcHeaders(sheet);
     var filterOutlet = _resolvedSessionOutlet_(session);
     if (params.outlet) filterOutlet = (params.outlet || '').toString().trim();
     var productFilter = (params.productFilter || params.productCode || '').toString().trim();
     var filterChef = params.chef ? params.chef.toString().trim().toLowerCase() : '';
     var filterStatus = params.status ? params.status.toString().trim() : '';
-    var startDate = _parseHistoryFilterStart_(params.startDate);
-    var endDate = _parseHistoryFilterEnd_(params.endDate);
     var sortBy = (params.sortBy || 'startTime').toString();
     var sortDir = (params.sortDir || 'desc').toString().toLowerCase() === 'asc' ? 1 : -1;
 

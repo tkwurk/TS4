@@ -49,7 +49,7 @@ export function SalesReportPanel({ auth }: { auth: AuthContext }) {
   const shift = (days: number) => setDate(addDays(date, days))
 
   return (
-    <Panel title={`📅 ${t('nav.monthlySalesReport')}`}>
+    <Panel title={`💹 ${t('nav.salesSummary')}`}>
       <FormRow>
         <Field label={t('kitchen.date')}>
           <TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} />

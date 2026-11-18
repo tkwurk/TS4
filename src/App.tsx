@@ -84,7 +84,6 @@ function App() {
       case 'adminOrders':
         return <AdminPanel auth={auth} />
       case 'salesSummary':
-      case 'monthlySalesReport':
         return <SalesReportPanel auth={auth} />
       case 'kitchenCooking':
         return <KitchenPanel auth={auth} />

@@ -35,6 +35,55 @@ function getSalesSummaryData(deviceId, username) {
     });
 }
 
+/**
+ * Reads only the rows of `sheet` that fall on one business day. Date-ordered
+ * (ascending) sheets are binary-searched on a single date column, then just that
+ * row block is read — far cheaper than getDataRange() on the whole sheet. If the
+ * date column is not usable for the search (blank/invalid cells, not ascending),
+ * falls back to reading every row, so results are always correct.
+ * @return {{headers: Array, rows: Array[], firstRow: number}} firstRow = 1-based sheet row of rows[0].
+ */
+function readRowsForDay_(sheet, dateHeaderRe, startOfDay, endOfDay) {
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) {
+    return { headers: lastCol >= 1 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [], rows: [], firstRow: 2 };
+  }
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var dateIdx = headers.findIndex(function(h) { return h && dateHeaderRe.test(h); });
+
+  function fullRead() {
+    return { headers: headers, rows: sheet.getRange(2, 1, lastRow - 1, lastCol).getValues(), firstRow: 2 };
+  }
+  if (dateIdx < 0) return fullRead();
+
+  var col = sheet.getRange(2, dateIdx + 1, lastRow - 1, 1).getValues();
+  var n = col.length;
+  var ms = new Array(n);
+  for (var i = 0; i < n; i++) {
+    var v = col[i][0];
+    var t = v instanceof Date ? v.getTime() : (v ? new Date(v).getTime() : NaN);
+    if (isNaN(t)) return fullRead();
+    if (i > 0 && t < ms[i - 1]) return fullRead();
+    ms[i] = t;
+  }
+
+  var startMs = startOfDay.getTime();
+  var endMs = endOfDay.getTime();
+  var lo = 0, hi = n;
+  while (lo < hi) { var m = (lo + hi) >> 1; if (ms[m] < startMs) lo = m + 1; else hi = m; }
+  var first = lo;
+  hi = n;
+  while (lo < hi) { var m2 = (lo + hi) >> 1; if (ms[m2] <= endMs) lo = m2 + 1; else hi = m2; }
+  var count = lo - first;
+  if (count <= 0) return { headers: headers, rows: [], firstRow: first + 2 };
+  return {
+    headers: headers,
+    rows: sheet.getRange(first + 2, 1, count, lastCol).getValues(),
+    firstRow: first + 2
+  };
+}
+
 function getSalesSummaryByDate(params) {
   try {
     // Handle both SecurityWrapper format and legacy direct calls
@@ -88,13 +137,7 @@ function getSalesSummaryByDate(params) {
       return emptySalesSummary(fixedDateString);
     }
     
-    const data = sheet.getDataRange().getValues();
-    
-    if (!data || !Array.isArray(data) || data.length === 0) {
-      return emptySalesSummary(fixedDateString);
-    }
-    
-    const headers = data[0];
+    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
 
     // Get current user's outlet
     const session = getUserSessionEnhanced(deviceId, username) || {};
@@ -164,7 +207,10 @@ function getSalesSummaryByDate(params) {
     let outletFilteredRows = 0;
     let dateFilteredRows = 0;
 
-    data.slice(1).forEach((row, index) => {
+    const ORDER_DATE_RE = /timestamp|date|tanggal|waktu|time/i;
+    const dayOrders = readRowsForDay_(sheet, ORDER_DATE_RE, targetStartOfDay, targetEndOfDay);
+
+    dayOrders.rows.forEach((row, index) => {
       processedRows++;
       
       // Filter by outlet first - only process rows that match user's outlet
@@ -297,7 +343,8 @@ function getSalesSummaryByDate(params) {
     try {
       const depositSheet = getGlobalSpreadsheet().getSheetByName(SHEETS.DEPOSITS);
       if (depositSheet) {
-        const depositData = depositSheet.getDataRange().getValues();
+        const dayDeposits = readRowsForDay_(depositSheet, /date|timestamp/i, targetStartOfDay, targetEndOfDay);
+        const depositData = [dayDeposits.headers].concat(dayDeposits.rows);
         if (depositData.length > 1) {
           const depositHeaders = depositData[0];
           const depositDateIdx = depositHeaders.findIndex(h => /date|timestamp/i.test(h));
@@ -358,7 +405,8 @@ function getSalesSummaryByDate(params) {
     try {
       const missedSheet = getGlobalSpreadsheet().getSheetByName(SHEETS.MISSED_ORDERS);
       if (missedSheet) {
-        const missedData = missedSheet.getDataRange().getValues();
+        const dayMissed = readRowsForDay_(missedSheet, /timestamp|date/i, targetStartOfDay, targetEndOfDay);
+        const missedData = [dayMissed.headers].concat(dayMissed.rows);
         if (missedData.length > 1) {
           const mHeaders = missedData[0];
           const mDateIdx = mHeaders.findIndex(h => /timestamp|date/i.test(h));
@@ -613,12 +661,7 @@ function getOrderLinesByDate(params) {
       return JSON.stringify({ date: fixedDateString, lines: [], count: 0 });
     }
 
-    var data = sheet.getDataRange().getValues();
-    if (!data || !data.length) {
-      return JSON.stringify({ date: fixedDateString, lines: [], count: 0 });
-    }
-
-    var headers = data[0];
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var session = getUserSessionEnhanced(deviceId, username) || {};
     var userOutlet = session.outlet;
     var actualUserOutlet = userOutlet;
@@ -663,8 +706,12 @@ function getOrderLinesByDate(params) {
     var targetEndOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
     var lines = [];
 
-    for (var i = 1; i < data.length; i++) {
-      var row = data[i];
+    var dayOrders = readRowsForDay_(sheet, /timestamp|date|tanggal|waktu|time/i, targetStartOfDay, targetEndOfDay);
+    var dayRows = dayOrders.rows;
+
+    for (var k = 0; k < dayRows.length; k++) {
+      var row = dayRows[k];
+      var i = dayOrders.firstRow - 1 + k;
       if (outletIdx >= 0) {
         if (!actualUserOutlet) continue;
         if (typeof outletRowMatchesUser_ === 'function') {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fmtDateTime, localDate, localDateTime } from '@/lib/dates'
 import type { AuthContext } from '@/services/api'
 import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Stats, SubTabs, TextArea, TextInput } from '@/components/ui'
@@ -20,6 +20,7 @@ type Msg = { tone: 'info' | 'error'; text: string }
 
 const nowLocal = () => localDateTime()
 const today = () => localDate()
+const CACHE_MS = 30_000
 
 /**
  * Kitchen tab — mirrors ui_kitchenCooking.html: log a cooking batch (shared
@@ -71,6 +72,7 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
       setMsg({ tone: 'info', text })
       setQty({})
       setNotes('')
+      cache.current.clear()
       loadProducts()
       loadRequests()
     } else setMsg({ tone: 'error', text: r.error ?? '' })
@@ -98,33 +100,77 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
   const [report, setReport] = useState<TodayReportItem[]>([])
   const [loadingReport, setLoadingReport] = useState(false)
 
-  const loadReport = useCallback(async () => {
-    setLoadingReport(true)
-    const r = await getCookingTodayReport(reportDate, auth)
-    setLoadingReport(false)
-    if (r.ok) setReport(r.data?.items ?? [])
-    else setMsg({ tone: 'error', text: r.error ?? '' })
-  }, [auth, reportDate])
+  // Short-lived response cache so flipping between sub-tabs doesn't refetch; cleared after a cook is saved.
+  const cache = useRef(new Map<string, { at: number; data: unknown }>())
+  const fresh = (key: string) => {
+    const hit = cache.current.get(key)
+    return hit && Date.now() - hit.at < CACHE_MS ? hit.data : undefined
+  }
+
+  const loadReport = useCallback(
+    async (force = false) => {
+      const key = `today|${reportDate}`
+      const hit = force ? undefined : (fresh(key) as TodayReportItem[] | undefined)
+      if (hit) return setReport(hit)
+      setLoadingReport(true)
+      const r = await getCookingTodayReport(reportDate, auth)
+      setLoadingReport(false)
+      if (r.ok) {
+        const items = r.data?.items ?? []
+        cache.current.set(key, { at: Date.now(), data: items })
+        setReport(items)
+      } else setMsg({ tone: 'error', text: r.error ?? '' })
+    },
+    [auth, reportDate],
+  )
 
   // ── History ──
   const [hStart, setHStart] = useState(today)
   const [hEnd, setHEnd] = useState(today)
   const [hProduct, setHProduct] = useState('')
+  const [hGroup, setHGroup] = useState(false)
   const [history, setHistory] = useState<CookingHistoryRow[]>([])
   const [loadingHist, setLoadingHist] = useState(false)
 
-  const loadHistory = useCallback(async () => {
-    setLoadingHist(true)
-    const r = await getCookingHistory({ startDate: hStart, endDate: hEnd, productFilter: hProduct }, auth)
-    setLoadingHist(false)
-    if (r.ok) setHistory(r.data?.rows ?? [])
-    else setMsg({ tone: 'error', text: r.error ?? '' })
-  }, [auth, hStart, hEnd, hProduct])
+  const loadHistory = useCallback(
+    async (force = false) => {
+      const key = `hist|${hStart}|${hEnd}|${hProduct}`
+      const hit = force ? undefined : (fresh(key) as CookingHistoryRow[] | undefined)
+      if (hit) return setHistory(hit)
+      setLoadingHist(true)
+      const r = await getCookingHistory({ startDate: hStart, endDate: hEnd, productFilter: hProduct }, auth)
+      setLoadingHist(false)
+      if (r.ok) {
+        const rows = r.data?.rows ?? []
+        cache.current.set(key, { at: Date.now(), data: rows })
+        setHistory(rows)
+      } else setMsg({ tone: 'error', text: r.error ?? '' })
+    },
+    [auth, hStart, hEnd, hProduct],
+  )
+
+  // Total cooked qty per product per business day.
+  const grouped = useMemo(() => {
+    const m = new Map<string, { day: string; productName: string; qty: number; batches: number }>()
+    for (const h of history) {
+      if (!h.startTime) continue
+      const day = localDate(new Date(h.startTime))
+      const key = `${day}|${h.productCode || h.productName}`
+      const cur = m.get(key) ?? { day, productName: h.productName, qty: 0, batches: 0 }
+      cur.qty += Number(h.qty) || 0
+      cur.batches += 1
+      m.set(key, cur)
+    }
+    return Array.from(m.values()).sort((a, b) => b.day.localeCompare(a.day) || a.productName.localeCompare(b.productName))
+  }, [history])
 
   useEffect(() => {
     loadProducts()
     loadRequests()
-    const id = setInterval(loadRequests, 60_000)
+    // Poll only while the tab is visible.
+    const id = setInterval(() => {
+      if (!document.hidden) loadRequests()
+    }, 60_000)
     return () => clearInterval(id)
   }, [loadProducts, loadRequests])
 
@@ -292,7 +338,7 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
               <TextInput type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
             </Field>
             <div className="actions" style={{ alignSelf: 'end' }}>
-              <Button variant="ghost" onClick={loadReport} disabled={loadingReport} title={t('kitchen.loadReport')}>
+              <Button variant="ghost" onClick={() => loadReport(true)} disabled={loadingReport} title={t('kitchen.loadReport')}>
                 {loadingReport ? t('common.loading') : '↻'}
               </Button>
             </div>
@@ -357,23 +403,41 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
               </datalist>
             </Field>
             <div className="actions" style={{ alignSelf: 'end' }}>
-              <Button variant="ghost" onClick={loadHistory} disabled={loadingHist} title={t('kitchen.loadHistory')}>
+              <Button variant="ghost" onClick={() => loadHistory(true)} disabled={loadingHist} title={t('kitchen.loadHistory')}>
                 {loadingHist ? t('common.loading') : '↻'}
               </Button>
             </div>
           </FormRow>
-          <DataTable
-            rows={history as unknown as Record<string, unknown>[]}
-            rowKey={(r, i) => `${r.cookingId}-${i}`}
-            empty={loadingHist ? t('common.loading') : t('kitchen.noHistory')}
-            columns={[
-              { key: 'startTime', label: t('kitchen.start'), render: (r) => fmtDateTime(r.startTime) },
-              { key: 'productName', label: t('kitchen.product') },
-              { key: 'qty', label: t('kitchen.qty'), align: 'right' },
-              { key: 'chef', label: t('kitchen.chef') },
-              { key: 'notes', label: t('kitchen.notes') },
-            ]}
-          />
+          <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', margin: '0.5rem 0' }}>
+            <input type="checkbox" checked={hGroup} onChange={(e) => setHGroup(e.target.checked)} />
+            {t('kitchen.groupByProduct')}
+          </label>
+          {hGroup ? (
+            <DataTable
+              rows={grouped as unknown as Record<string, unknown>[]}
+              rowKey={(r, i) => `${r.day}-${r.productName}-${i}`}
+              empty={loadingHist ? t('common.loading') : t('kitchen.noHistory')}
+              columns={[
+                { key: 'day', label: t('kitchen.date') },
+                { key: 'productName', label: t('kitchen.product') },
+                { key: 'batches', label: t('kitchen.batches'), align: 'right', render: (r) => fmtNum(Number(r.batches) || 0) },
+                { key: 'qty', label: t('kitchen.totalQty'), align: 'right', render: (r) => <strong>{fmtNum(Number(r.qty) || 0)}</strong> },
+              ]}
+            />
+          ) : (
+            <DataTable
+              rows={history as unknown as Record<string, unknown>[]}
+              rowKey={(r, i) => `${r.cookingId}-${i}`}
+              empty={loadingHist ? t('common.loading') : t('kitchen.noHistory')}
+              columns={[
+                { key: 'startTime', label: t('kitchen.start'), render: (r) => fmtDateTime(r.startTime) },
+                { key: 'productName', label: t('kitchen.product') },
+                { key: 'qty', label: t('kitchen.qty'), align: 'right' },
+                { key: 'chef', label: t('kitchen.chef') },
+                { key: 'notes', label: t('kitchen.notes') },
+              ]}
+            />
+          )}
         </>
       )}
     </Panel>
