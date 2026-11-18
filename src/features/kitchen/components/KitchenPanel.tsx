@@ -215,8 +215,8 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
               rowKey={(r) => String(r.productCode)}
               empty={t('kitchen.noProducts')}
               columns={[
-                { key: 'name', label: t('kitchen.product') },
-                { key: 'cookedToday', label: t('kitchen.cookedToday'), align: 'right', render: (r) => fmtNum(Number(r.cookedToday) || 0) },
+                { sortable: true, key: 'name', label: t('kitchen.product') },
+                { sortable: true, key: 'cookedToday', label: t('kitchen.cookedToday'), align: 'right', render: (r) => fmtNum(Number(r.cookedToday) || 0) },
                 {
                   key: 'qty',
                   label: t('kitchen.qtyCooked'),
@@ -265,9 +265,9 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
             rowKey={(r) => String(r.requestId)}
             empty={t('kitchen.noRequests')}
             columns={[
-              { key: 'productName', label: t('kitchen.product'), render: (r) => <strong>{String(r.productName ?? r.productCode)}</strong> },
+              { sortable: true, key: 'productName', label: t('kitchen.product'), render: (r) => <strong>{String(r.productName ?? r.productCode)}</strong> },
               {
-                key: 'remaining',
+                sortable: true, key: 'remaining',
                 label: t('kitchen.remaining'),
                 align: 'right',
                 render: (r) => {
@@ -282,7 +282,7 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
                 },
               },
               {
-                key: 'createdAt',
+                sortable: true, key: 'createdAt',
                 label: t('kitchen.requestedAt'),
                 render: (r) => (
                   <>
@@ -292,7 +292,7 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
                 ),
               },
               {
-                key: 'lastNotifiedAt',
+                sortable: true, key: 'lastNotifiedAt',
                 label: t('kitchen.remindedAt'),
                 render: (r) =>
                   r.lastNotifiedAt ? (
@@ -307,7 +307,7 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
                   ),
               },
               {
-                key: 'status',
+                sortable: true, key: 'status',
                 label: t('kitchen.status'),
                 render: (r) => <Badge tone={r.status === 'COOKING' ? 'ok' : 'bad'}>{r.status === 'COOKING' ? t('kitchen.cookingInProgress') : t('kitchen.waiting')}</Badge>,
               },
@@ -320,10 +320,10 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
                 rows={recentDone as unknown as Record<string, unknown>[]}
                 rowKey={(r) => String(r.requestId)}
                 columns={[
-                  { key: 'productName', label: t('kitchen.product') },
-                  { key: 'createdAt', label: t('kitchen.requestedAt'), render: (r) => fmtDateTime(r.createdAt) },
-                  { key: 'updatedAt', label: t('kitchen.completedAt'), render: (r) => fmtDateTime(r.updatedAt) },
-                  { key: 'handledBy', label: t('kitchen.by') },
+                  { sortable: true, key: 'productName', label: t('kitchen.product') },
+                  { sortable: true, key: 'createdAt', label: t('kitchen.requestedAt'), render: (r) => fmtDateTime(r.createdAt) },
+                  { sortable: true, key: 'updatedAt', label: t('kitchen.completedAt'), render: (r) => fmtDateTime(r.updatedAt) },
+                  { sortable: true, key: 'handledBy', label: t('kitchen.by') },
                 ]}
               />
             </>
@@ -358,12 +358,12 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
             rowKey={(r) => String(r.productCode ?? r.name)}
             empty={loadingReport ? t('common.loading') : t('kitchen.noReport')}
             columns={[
-              { key: 'name', label: t('kitchen.product') },
-              { key: 'leftoverFromYesterday', label: t('kitchen.leftover'), align: 'right', render: (r) => fmtNum(Number(r.leftoverFromYesterday) || 0) },
-              { key: 'cookedToday', label: t('kitchen.cooked'), align: 'right', render: (r) => fmtNum(Number(r.cookedToday) || 0) },
-              { key: 'soldToday', label: t('kitchen.sold'), align: 'right', render: (r) => fmtNum(Number(r.soldToday) || 0) },
+              { sortable: true, key: 'name', label: t('kitchen.product') },
+              { sortable: true, key: 'leftoverFromYesterday', label: t('kitchen.leftover'), align: 'right', render: (r) => fmtNum(Number(r.leftoverFromYesterday) || 0) },
+              { sortable: true, key: 'cookedToday', label: t('kitchen.cooked'), align: 'right', render: (r) => fmtNum(Number(r.cookedToday) || 0) },
+              { sortable: true, key: 'soldToday', label: t('kitchen.sold'), align: 'right', render: (r) => fmtNum(Number(r.soldToday) || 0) },
               {
-                key: 'remaining',
+                sortable: true, key: 'remaining',
                 label: t('kitchen.remaining'),
                 align: 'right',
                 render: (r) => (
@@ -418,10 +418,10 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
               rowKey={(r, i) => `${r.day}-${r.productName}-${i}`}
               empty={loadingHist ? t('common.loading') : t('kitchen.noHistory')}
               columns={[
-                { key: 'day', label: t('kitchen.date') },
-                { key: 'productName', label: t('kitchen.product') },
-                { key: 'batches', label: t('kitchen.batches'), align: 'right', render: (r) => fmtNum(Number(r.batches) || 0) },
-                { key: 'qty', label: t('kitchen.totalQty'), align: 'right', render: (r) => <strong>{fmtNum(Number(r.qty) || 0)}</strong> },
+                { sortable: true, key: 'day', label: t('kitchen.date') },
+                { sortable: true, key: 'productName', label: t('kitchen.product') },
+                { sortable: true, key: 'batches', label: t('kitchen.batches'), align: 'right', render: (r) => fmtNum(Number(r.batches) || 0) },
+                { sortable: true, key: 'qty', label: t('kitchen.totalQty'), align: 'right', render: (r) => <strong>{fmtNum(Number(r.qty) || 0)}</strong> },
               ]}
             />
           ) : (
@@ -430,11 +430,11 @@ export function KitchenPanel({ auth }: { auth: AuthContext }) {
               rowKey={(r, i) => `${r.cookingId}-${i}`}
               empty={loadingHist ? t('common.loading') : t('kitchen.noHistory')}
               columns={[
-                { key: 'startTime', label: t('kitchen.start'), render: (r) => fmtDateTime(r.startTime) },
-                { key: 'productName', label: t('kitchen.product') },
-                { key: 'qty', label: t('kitchen.qty'), align: 'right' },
-                { key: 'chef', label: t('kitchen.chef') },
-                { key: 'notes', label: t('kitchen.notes') },
+                { sortable: true, key: 'startTime', label: t('kitchen.start'), render: (r) => fmtDateTime(r.startTime) },
+                { sortable: true, key: 'productName', label: t('kitchen.product') },
+                { sortable: true, key: 'qty', label: t('kitchen.qty'), align: 'right' },
+                { sortable: true, key: 'chef', label: t('kitchen.chef') },
+                { sortable: true, key: 'notes', label: t('kitchen.notes') },
               ]}
             />
           )}
