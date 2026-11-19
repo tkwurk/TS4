@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AuthContext } from '@/services/api'
 import { addDays, fmtDateOnly, localDate } from '@/lib/dates'
-import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Stats, SubTabs, TextInput } from '@/components/ui'
+import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Select, Stats, SubTabs, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
 import { getConsumptionHistory, getDailyClosingBundle, recordConsumption, type ConsumptionHistoryRow, type DailyClosingBundle } from '../api'
 
@@ -21,6 +21,7 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
   const [saving, setSaving] = useState(false)
   const [qty, setQty] = useState<Record<string, string>>({})
   const [search, setSearch] = useState('')
+  const [category, setCategory] = useState('')
   const [msg, setMsg] = useState<Msg | null>(null)
   const [historyStart, setHistoryStart] = useState(() => addDays(localDate(), -29))
   const [historyEnd, setHistoryEnd] = useState(() => localDate())
@@ -33,7 +34,11 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
     const r = await getDailyClosingBundle(auth)
     setLoading(false)
     if (!r.success || !r.data) return setMsg({ tone: 'error', text: r.error ?? t('cons.loadFailed') })
-    setBundle(r.data)
+    const nextData = r.data
+    setCategory((current) =>
+      current && !(nextData.products ?? []).some((p) => current === `category:${p.category ?? ''}`) ? '' : current,
+    )
+    setBundle(nextData)
     // Prefill from today's sales-derived consumption (same as the original).
     const pre: Record<string, string> = {}
     for (const i of r.data.autoPrefill?.items ?? []) if (i.quantity > 0) pre[i.productCode] = String(i.quantity)
@@ -51,9 +56,18 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
     return result
   }, [bundle])
   const query = search.trim().toLowerCase()
+  const categories = useMemo(
+    () => Array.from(new Set(products.map((p) => p.category ?? ''))).sort((a, b) => a.localeCompare(b)),
+    [products],
+  )
   const visible = useMemo(
-    () => (query ? products.filter((p) => p.name.toLowerCase().includes(query) || p.productCode.toLowerCase().includes(query)) : products),
-    [products, query],
+    () =>
+      products.filter(
+        (p) =>
+          (!query || p.name.toLowerCase().includes(query) || p.productCode.toLowerCase().includes(query)) &&
+          (!category || category === `category:${p.category ?? ''}`),
+      ),
+    [products, query, category],
   )
   const items = useMemo(
     () =>
@@ -121,14 +135,24 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
 
       {tab === 'entry' && (
         <>
-          <div className="actions">
+          <FormRow>
             <Field label={t('checkout.search')}>
               <TextInput type="search" value={search} onChange={(e) => setSearch(e.target.value)} />
             </Field>
-            <Button variant="ghost" onClick={load} disabled={loading}>
-              {loading ? t('common.loading') : '↻'}
-            </Button>
-          </div>
+            <Field label={t('inv.category')}>
+              <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+                <option value="">{t('common.all')}</option>
+                {categories.map((name) => (
+                  <option key={name} value={`category:${name}`}>{name || t('stock.uncategorized')}</option>
+                ))}
+              </Select>
+            </Field>
+            <div className="actions" style={{ alignSelf: 'end' }}>
+              <Button variant="ghost" onClick={load} disabled={loading}>
+                {loading ? t('common.loading') : '↻'}
+              </Button>
+            </div>
+          </FormRow>
           {bundle?.autoPrefill?.totalItems ? (
             <Notice tone="info">
               {t('cons.prefilled')}: {fmtNum(bundle.autoPrefill.totalItems)} ({bundle.autoPrefill.date})
@@ -141,14 +165,24 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
           <DataTable
             rows={visible as unknown as Record<string, unknown>[]}
             rowKey={(r) => String(r.productCode)}
+            defaultSort={{ key: 'suggested', dir: 'desc' }}
             empty={loading ? t('common.loading') : t('cons.noProducts')}
             columns={[
-              { key: 'name', label: t('purch.product'), render: (r) => <>{String(r.name)}<div className="muted">{String(r.category ?? '')} · {String(r.unit ?? '')}</div></> },
-              { key: 'suggested', label: t('cons.suggested'), align: 'right', render: (r) => fmtNum(suggestions[String(r.productCode)] ?? 0) },
+              { key: 'name', label: t('purch.product'), sortable: true, render: (r) => <>{String(r.name)}<div className="muted">{String(r.category ?? '')} · {String(r.unit ?? '')}</div></> },
+              {
+                key: 'suggested',
+                label: t('cons.suggested'),
+                align: 'right',
+                sortable: true,
+                sortValue: (r) => suggestions[String(r.productCode)] ?? 0,
+                render: (r) => fmtNum(suggestions[String(r.productCode)] ?? 0),
+              },
               {
                 key: 'qty',
                 label: t('cons.consumed'),
                 align: 'right',
+                sortable: true,
+                sortValue: (r) => Number(qty[String(r.productCode)]) || 0,
                 render: (r) => (
                   <input
                     type="number"
@@ -201,11 +235,13 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
           <DataTable
             rows={kfVisible as unknown as Record<string, unknown>[]}
             rowKey={(r) => String(r.productCode)}
+            defaultSort={{ key: 'remaining', dir: 'asc' }}
             empty={loading ? t('common.loading') : t('cons.noSummary')}
             columns={[
               {
                 key: 'name',
                 label: t('purch.product'),
+                sortable: true,
                 render: (r) => (
                   <>
                     {String(r.name)}
@@ -217,20 +253,22 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
                   </>
                 ),
               },
-              { key: 'totalPurchased', label: t('stock.purchased'), align: 'right', render: (r) => fmtNum(Number(r.totalPurchased) || 0) },
-              { key: 'totalConsumed', label: t('stock.consumed'), align: 'right', render: (r) => fmtNum(Number(r.totalConsumed) || 0) },
-              { key: 'totalSold', label: t('kitchen.sold'), align: 'right', render: (r) => fmtNum(Number(r.totalSold) || 0) },
+              { key: 'totalPurchased', label: t('stock.purchased'), align: 'right', sortable: true, sortValue: (r) => Number(r.totalPurchased) || 0, render: (r) => fmtNum(Number(r.totalPurchased) || 0) },
+              { key: 'totalConsumed', label: t('stock.consumed'), align: 'right', sortable: true, sortValue: (r) => Number(r.totalConsumed) || 0, render: (r) => fmtNum(Number(r.totalConsumed) || 0) },
+              { key: 'totalSold', label: t('kitchen.sold'), align: 'right', sortable: true, sortValue: (r) => Number(r.totalSold) || 0, render: (r) => fmtNum(Number(r.totalSold) || 0) },
               {
                 key: 'remaining',
                 label: t('kitchen.remaining'),
                 align: 'right',
+                sortable: true,
+                sortValue: (r) => Number(r.remaining) || 0,
                 render: (r) => {
                   const rem = Number(r.remaining) || 0
                   const reorder = Number(r.reorderQty) || 0
                   return <Badge tone={rem <= 0 ? 'bad' : reorder && rem <= reorder ? 'neutral' : 'ok'}>{fmtNum(rem)}</Badge>
                 },
               },
-              { key: 'reorderQty', label: t('cons.reorderAt'), align: 'right', render: (r) => (Number(r.reorderQty) ? fmtNum(Number(r.reorderQty)) : '—') },
+              { key: 'reorderQty', label: t('cons.reorderAt'), align: 'right', sortable: true, sortValue: (r) => Number(r.reorderQty) || 0, render: (r) => (Number(r.reorderQty) ? fmtNum(Number(r.reorderQty)) : '—') },
             ]}
           />
 
@@ -241,9 +279,9 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
                 rows={summary.items as Record<string, unknown>[]}
                 rowKey={(r, i) => `${r.productCode ?? i}`}
                 columns={[
-                  { key: 'name', label: t('purch.product'), render: (r) => String(r.productName ?? r.name ?? r.productCode ?? '') },
-                  { key: 'unit', label: t('cons.unit') },
-                  { key: 'quantity', label: t('cons.consumed'), align: 'right', render: (r) => fmtNum(Number(r.quantity) || 0) },
+                  { key: 'name', label: t('purch.product'), sortable: true, sortValue: (r) => String(r.productName ?? r.name ?? r.productCode ?? ''), render: (r) => String(r.productName ?? r.name ?? r.productCode ?? '') },
+                  { key: 'unit', label: t('cons.unit'), sortable: true },
+                  { key: 'quantity', label: t('cons.consumed'), align: 'right', sortable: true, sortValue: (r) => Number(r.quantity) || 0, render: (r) => fmtNum(Number(r.quantity) || 0) },
                 ]}
               />
             </>
