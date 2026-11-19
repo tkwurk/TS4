@@ -9,8 +9,13 @@ function setup() {
   const triggers = []
   const calls = []
   const context = vm.createContext({
+    Date,
     SHEETS: { STOCK_HISTORY: 'Stock_History' },
     Session: { getScriptTimeZone: () => 'Asia/Jakarta' },
+    getAppDateKey_: (date) => date.toISOString().slice(0, 10),
+    Repo: {
+      readTable: () => ({ headers: [], rows: [] }),
+    },
     PropertiesService: {
       getScriptProperties: () => ({
         getProperty: (key) => properties.get(key) ?? null,
@@ -119,6 +124,53 @@ test('PWA status event requires adminOrders and returns job status', () => {
   assert.equal(routed.data.steps.stockHistoryStatus.data.triggerActive, true)
   assert.equal(routed.data.steps.stockHistoryStatus.data.scheduleHour, 0)
   assert.equal(calls[0].permission, 'adminOrders')
+})
+
+test('status reports the latest snapshot date in Stock_History, not the last job target', () => {
+  const { context, properties } = setup()
+  properties.set('STOCK_HISTORY_LAST_DATE', '2026-11-18')
+  context.Repo.readTable = () => ({
+    headers: ['AsOfDate', 'Outlet', 'ProductCode', 'TotalPurchased', 'TotalConsumed', 'TotalSold', 'UpdatedAt'],
+    rows: [
+      { AsOfDate: new Date('2026-10-30T00:00:00Z'), Outlet: 'Central', ProductCode: 'A' },
+      { AsOfDate: '2026-11-18', Outlet: 'Central', ProductCode: 'B' },
+      { AsOfDate: '2026-11-17', Outlet: 'West', ProductCode: 'C' },
+    ],
+  })
+
+  assert.equal(context.getNightlyStockHistoryTriggerInfo().lastBusinessDate, '2026-11-17')
+})
+
+test('a stale sheet Date snapshot is not treated as current', () => {
+  const { context } = setup()
+  context.Repo.readTable = () => ({
+    headers: ['AsOfDate', 'Outlet', 'ProductCode', 'TotalPurchased', 'TotalConsumed', 'TotalSold', 'UpdatedAt'],
+    rows: [
+      { AsOfDate: new Date('2026-10-30T00:00:00Z'), Outlet: 'Central', ProductCode: 'A', TotalPurchased: 7 },
+    ],
+  })
+  context.getYesterdayBusinessDateStr_ = () => '2026-11-18'
+  context._todayBusinessDateStr_ = () => '2026-11-19'
+
+  const snapshot = context.readStockHistorySnapshot_('Central')
+  assert.equal(snapshot.asOfDate, '2026-10-30')
+  assert.equal(snapshot.byCode.A.totalPurchased, 7)
+  const totals = context.getStockTotalsForOutlet_('Central', { requireCompleteHistory: true })
+  assert.equal(totals.historyIncomplete, true)
+})
+
+test('time-driven trigger events use yesterday as the history target', () => {
+  const { context } = setup()
+  context.ensureStockHistorySheet_ = () => {}
+  context.getYesterdayBusinessDateStr_ = () => '2026-11-18'
+  context.getDistinctOutletsForConsumption_ = () => ['Central']
+  context.readStockHistorySnapshot_ = () => ({ asOfDate: '2026-10-30' })
+  context.advanceStockHistoryForOutlet_ = (outlet, date) => ({ outlet, asOfDate: date, rows: 1 })
+  context.formatTimestampForSheet = () => '2026-11-19 00:00:00'
+
+  const result = context.runNightlyStockHistoryJob({ triggerUid: 'trigger-id' })
+  assert.equal(result.date, '2026-11-18')
+  assert.equal(result.results[0].asOfDate, '2026-11-18')
 })
 
 test('stock-history status and scheduling reject unauthenticated callers', () => {

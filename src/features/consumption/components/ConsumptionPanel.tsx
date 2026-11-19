@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AuthContext } from '@/services/api'
-import { fmtDateOnly } from '@/lib/dates'
+import { addDays, fmtDateOnly, localDate } from '@/lib/dates'
 import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Stats, SubTabs, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
-import { getDailyClosingBundle, recordConsumption, type DailyClosingBundle } from '../api'
+import { getConsumptionHistory, getDailyClosingBundle, recordConsumption, type ConsumptionHistoryRow, type DailyClosingBundle } from '../api'
 
-type Tab = 'entry' | 'summary'
+type Tab = 'entry' | 'summary' | 'history'
 type Msg = { tone: 'info' | 'error'; text: string }
 
 /**
@@ -22,12 +22,17 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
   const [qty, setQty] = useState<Record<string, string>>({})
   const [search, setSearch] = useState('')
   const [msg, setMsg] = useState<Msg | null>(null)
+  const [historyStart, setHistoryStart] = useState(() => addDays(localDate(), -29))
+  const [historyEnd, setHistoryEnd] = useState(() => localDate())
+  const [historyRows, setHistoryRows] = useState<ConsumptionHistoryRow[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     const r = await getDailyClosingBundle(auth)
     setLoading(false)
-    if (!r.ok || !r.data) return setMsg({ tone: 'error', text: r.error ?? t('cons.loadFailed') })
+    if (!r.success || !r.data) return setMsg({ tone: 'error', text: r.error ?? t('cons.loadFailed') })
     setBundle(r.data)
     // Prefill from today's sales-derived consumption (same as the original).
     const pre: Record<string, string> = {}
@@ -40,6 +45,11 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
   }, [load])
 
   const products = bundle?.products ?? []
+  const suggestions = useMemo(() => {
+    const result: Record<string, number> = {}
+    for (const item of bundle?.autoPrefill?.items ?? []) result[item.productCode] = item.quantity
+    return result
+  }, [bundle])
   const query = search.trim().toLowerCase()
   const visible = useMemo(
     () => (query ? products.filter((p) => p.name.toLowerCase().includes(query) || p.productCode.toLowerCase().includes(query)) : products),
@@ -58,11 +68,24 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
     setSaving(true)
     const r = await recordConsumption(items, auth)
     setSaving(false)
-    if (r.ok) {
+    if (r.success) {
       setMsg({ tone: 'info', text: r.data?.message ?? t('cons.saved') })
       setQty({})
       load()
     } else setMsg({ tone: 'error', text: r.error ?? '' })
+  }
+
+  const loadHistory = async () => {
+    setHistoryLoading(true)
+    setHistoryError(null)
+    const r = await getConsumptionHistory(historyStart, historyEnd, auth)
+    setHistoryLoading(false)
+    if (!r.success || !r.data) {
+      setHistoryRows([])
+      setHistoryError(r.error ?? t('cons.historyFailed'))
+      return
+    }
+    setHistoryRows(r.data.rows)
   }
 
   const summary = bundle?.summary
@@ -86,9 +109,13 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
         tabs={[
           { id: 'entry', label: `✏️ ${t('cons.entry')}` },
           { id: 'summary', label: `📊 ${t('cons.today')}` },
+          { id: 'history', label: `📅 ${t('cons.history')}` },
         ]}
         active={tab}
-        onChange={setTab}
+        onChange={(next) => {
+          setTab(next)
+          if (next === 'history') void loadHistory()
+        }}
       />
       {msg && <Notice tone={msg.tone === 'error' ? 'error' : 'info'}>{msg.text}</Notice>}
 
@@ -107,12 +134,17 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
               {t('cons.prefilled')}: {fmtNum(bundle.autoPrefill.totalItems)} ({bundle.autoPrefill.date})
             </Notice>
           ) : null}
+          {!!bundle?.autoPrefill?.missingProductCodes?.length && (
+            <Notice tone="warn">{t('cons.missingSuggestions')}: {bundle.autoPrefill.missingProductCodes.join(', ')}</Notice>
+          )}
+          {(bundle?.summary?.totalItems ?? 0) > 0 && <Notice tone="warn">{t('cons.repeatWarning')}</Notice>}
           <DataTable
             rows={visible as unknown as Record<string, unknown>[]}
             rowKey={(r) => String(r.productCode)}
             empty={loading ? t('common.loading') : t('cons.noProducts')}
             columns={[
               { key: 'name', label: t('purch.product'), render: (r) => <>{String(r.name)}<div className="muted">{String(r.category ?? '')} · {String(r.unit ?? '')}</div></> },
+              { key: 'suggested', label: t('cons.suggested'), align: 'right', render: (r) => fmtNum(suggestions[String(r.productCode)] ?? 0) },
               {
                 key: 'qty',
                 label: t('cons.consumed'),
@@ -133,7 +165,7 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
             ]}
           />
           <div className="actions">
-            <Button onClick={save} disabled={saving || !items.length}>
+            <Button onClick={save} disabled={loading || saving || !items.length}>
               {saving ? t('checkout.submitting') : `💾 ${t('cons.save')} (${items.length})`}
             </Button>
           </div>
@@ -209,7 +241,7 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
                 rows={summary.items as Record<string, unknown>[]}
                 rowKey={(r, i) => `${r.productCode ?? i}`}
                 columns={[
-                  { key: 'name', label: t('purch.product'), render: (r) => String(r.name ?? r.productCode ?? '') },
+                  { key: 'name', label: t('purch.product'), render: (r) => String(r.productName ?? r.name ?? r.productCode ?? '') },
                   { key: 'unit', label: t('cons.unit') },
                   { key: 'quantity', label: t('cons.consumed'), align: 'right', render: (r) => fmtNum(Number(r.quantity) || 0) },
                 ]}
@@ -217,6 +249,43 @@ export function ConsumptionPanel({ auth }: { auth: AuthContext }) {
             </>
           )}
         </>
+      )}
+      {tab === 'history' && (
+            <>
+              <FormRow>
+                <Field label={t('kitchen.from')}>
+                  <TextInput type="date" value={historyStart} disabled={historyLoading} onChange={(e) => {
+                    setHistoryStart(e.target.value)
+                    setHistoryRows([])
+                    setHistoryError(null)
+                  }} />
+                </Field>
+                <Field label={t('kitchen.to')}>
+                  <TextInput type="date" value={historyEnd} disabled={historyLoading} onChange={(e) => {
+                    setHistoryEnd(e.target.value)
+                    setHistoryRows([])
+                    setHistoryError(null)
+                  }} />
+                </Field>
+                <div className="actions" style={{ alignSelf: 'end' }}>
+                  <Button onClick={loadHistory} disabled={historyLoading}>
+                    {historyLoading ? t('common.loading') : t('cons.showHistory')}
+                  </Button>
+                </div>
+              </FormRow>
+              {historyError && <Notice tone="error">{historyError}</Notice>}
+              <DataTable
+                rows={historyRows}
+                rowKey={(row) => `${row.date}|${row.productCode}`}
+                empty={historyLoading ? t('common.loading') : t('cons.noHistory')}
+                columns={[
+                  { key: 'date', label: t('kitchen.date'), sortable: true, render: (row) => fmtDateOnly(row.date) },
+                  { key: 'name', label: t('purch.product'), sortable: true },
+                  { key: 'unit', label: t('cons.unit'), sortable: true },
+                  { key: 'quantity', label: t('cons.consumed'), align: 'right', sortable: true, render: (row) => fmtNum(row.quantity) },
+                ]}
+              />
+            </>
       )}
     </Panel>
   )

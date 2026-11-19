@@ -59,12 +59,11 @@ function appendConsumptionRows_(items, outlet, username, timestamp) {
 
 function getBuyTypeProducts() {
   try {
-    const sheet = getGlobalSpreadsheet().getSheetByName(SHEETS.PRODUCTS);
-    if (!sheet) {
-      throw new Error("Products sheet not found");
-    }
-
-    const data = sheet.getDataRange().getValues();
+    const table = Repo.readTable('PRODUCTS');
+    if (!table.headers.length) throw new Error("Products sheet not found or has no headers");
+    const data = [table.headers].concat(table.rows.map(function (row) {
+      return table.headers.map(function (header) { return row[header]; });
+    }));
     if (data.length < 2) {
       return [];
     }
@@ -444,6 +443,18 @@ function getTodaysConsumptionSummary(deviceId, username) {
 /**
  * Keyfigure columns for Daily Closing — reuses today's scans; avoids a second Orders BOM pass.
  */
+function _readConsumptionReorderByCode_() {
+  var table = Repo.readTable('Keyfigures');
+  if (!table.headers.length) return {};
+  var lookup = {};
+  table.rows.forEach(function (row) {
+    var code = row[table.headers[1]];
+    if (!code) return;
+    lookup[normalizeProductCodeKey_(code)] = parseFloat(row[table.headers[9]]) || 0;
+  });
+  return lookup;
+}
+
 function buildDailyClosingKeyfigures_(outlet, options) {
   options = options || {};
   var buyProducts = options.buyProducts || [];
@@ -465,7 +476,14 @@ function buildDailyClosingKeyfigures_(outlet, options) {
   var historyAsOfDate = snapshot.asOfDate || null;
 
   if (!snapshot.asOfDate || snapshot.asOfDate < yesterdayStr) {
-    if (typeof getStockTotalsDirectSheet_ === 'function') {
+    if (options.repoOnly) {
+      var throughToday = getAppDateKey_(new Date());
+      purchaseQty = _readPurchaseQtyByCodeThroughDate_(outlet, throughToday);
+      consumedMap = _readRecordedConsumptionQtyByCodeThroughDate_(outlet, throughToday);
+      soldMap = {};
+      needsBootstrap = true;
+      stockSource = 'DirectSheet';
+    } else if (typeof getStockTotalsDirectSheet_ === 'function') {
       var direct = getStockTotalsDirectSheet_(outlet);
       purchaseQty = direct.purchased || {};
       consumedMap = direct.consumed || {};
@@ -504,8 +522,9 @@ function buildDailyClosingKeyfigures_(outlet, options) {
     });
   }
 
-  var reorderLookup = typeof _readKeyfigureReorderByCode_ === 'function'
-    ? _readKeyfigureReorderByCode_(outlet) : {};
+  var reorderLookup = options.repoOnly
+    ? _readConsumptionReorderByCode_()
+    : (typeof _readKeyfigureReorderByCode_ === 'function' ? _readKeyfigureReorderByCode_(outlet) : {});
   var recipeItemCodes = {};
   if (!needsBootstrap && typeof buildRecipeItemCodeSet_ === 'function') {
     recipeItemCodes = buildRecipeItemCodeSet_(
@@ -553,21 +572,23 @@ function buildDailyClosingKeyfigures_(outlet, options) {
 /**
  * Single server call for Daily Closing — one Orders scan, one Consumption scan.
  */
-function getDailyClosingBundle(deviceId, username) {
+function getDailyClosingBundle(deviceId, username, options) {
   try {
-    var session = getUserSessionEnhanced(deviceId, username) || {};
+    options = options || {};
+    var session = options.session || getUserSessionEnhanced(deviceId, username) || {};
     var userOutlet = session.outlet || '';
     if (typeof resolveUserOutlet_ === 'function' && session.username) {
       userOutlet = resolveUserOutlet_(session.username, userOutlet);
     }
 
-    var todayStr = formatDateForComparison(new Date());
-    var yesterdayStr = typeof getYesterdayBusinessDateStr_ === 'function'
-      ? getYesterdayBusinessDateStr_()
+    var todayStr = typeof getAppDateKey_ === 'function' ? getAppDateKey_(new Date()) : formatDateForComparison(new Date());
+    var yesterdayStr = options.repoOnly
+      ? getAppDateKey_(new Date(Date.now() - 86400000))
+      : typeof getYesterdayBusinessDateStr_ === 'function' ? getYesterdayBusinessDateStr_()
       : todayStr;
 
     // Auto-refresh Stock_History through yesterday on navigation to Daily Closing.
-    if (typeof ensureStockHistoryCurrentForOutlet_ === 'function') {
+    if (!options.repoOnly && typeof ensureStockHistoryCurrentForOutlet_ === 'function') {
       ensureStockHistoryCurrentForOutlet_(userOutlet);
     }
 
@@ -593,7 +614,7 @@ function getDailyClosingBundle(deviceId, username) {
     });
 
     var consumptionScanned = typeof readInventoryConsumptionForDate_ === 'function'
-      ? readInventoryConsumptionForDate_(todayStr, userOutlet)
+      ? readInventoryConsumptionForDate_(todayStr, userOutlet, { strictOutlet: !!options.repoOnly })
       : { consumptionMap: {} };
     var summaryBuilt = buildTodaysConsumptionSummaryFromMap_(
       consumptionScanned.consumptionMap || {},
@@ -601,7 +622,7 @@ function getDailyClosingBundle(deviceId, username) {
       {}
     );
 
-    var preferBottomUp = typeof shouldPreferBottomUpOrderScan_ === 'function'
+    var preferBottomUp = options.repoOnly ? true : typeof shouldPreferBottomUpOrderScan_ === 'function'
       ? shouldPreferBottomUpOrderScan_(todayStr)
       : true;
     var combined = typeof computeCombinedConsumptionForOutlet_ === 'function'
@@ -616,14 +637,36 @@ function getDailyClosingBundle(deviceId, username) {
             productIndex: typeof getCachedProductCodeIndex_ === 'function'
               ? getCachedProductCodeIndex_()
               : null,
-            preferBottomUp: preferBottomUp
+            preferBottomUp: preferBottomUp,
+            strictOutlet: !!options.repoOnly
           }
         )
       : { consumptionMap: {}, details: [] };
 
-    var prefillItems = typeof buildConsumptionPrefillLinesFromDetails_ === 'function'
-      ? buildConsumptionPrefillLinesFromDetails_(combined.details || [], buyByCode, productNames)
-      : [];
+    var missingSuggestionCodes = [];
+    var prefillItems = options.repoOnly
+      ? Object.keys(combined.consumptionMap || {}).map(function (code) {
+          var normalized = normalizeProductCodeKey_(code);
+          var product = buyByCode[normalized];
+          var quantity = Math.round((Number(combined.consumptionMap[code]) || 0) * 1000) / 1000;
+          if (!product && quantity > 0) missingSuggestionCodes.push(normalized);
+          return {
+            productCode: product ? product.productCode : '',
+            quantity: quantity
+          };
+        }).filter(function (item) { return item.productCode && item.quantity > 0; })
+      : (typeof buildConsumptionPrefillLinesFromDetails_ === 'function'
+        ? buildConsumptionPrefillLinesFromDetails_(combined.details || [], buyByCode, productNames)
+        : []);
+    if (options.repoOnly) {
+      var suggestionByCode = {};
+      prefillItems.forEach(function (item) { suggestionByCode[normalizeProductCodeKey_(item.productCode)] = item.quantity; });
+      buyProducts = buyProducts.slice().sort(function (a, b) {
+        return (suggestionByCode[normalizeProductCodeKey_(b.productCode)] || 0) -
+          (suggestionByCode[normalizeProductCodeKey_(a.productCode)] || 0) ||
+          String(a.name || '').localeCompare(String(b.name || ''));
+      });
+    }
 
     var snapshot = typeof readStockHistorySnapshot_ === 'function'
       ? readStockHistorySnapshot_(userOutlet)
@@ -652,10 +695,11 @@ function getDailyClosingBundle(deviceId, username) {
       yesterdayStr: yesterdayStr,
       todayPurchased: todayPurchased,
       todayConsumed: todayConsumed,
-      todaySold: todaySold
+      todaySold: todaySold,
+      repoOnly: !!options.repoOnly
     });
 
-    var smartPicks = typeof getAllSmartPicks === 'function'
+    var smartPicks = !options.repoOnly && typeof getAllSmartPicks === 'function'
       ? getAllSmartPicks(deviceId, username)
       : { orders: [], consumption: [] };
 
@@ -666,7 +710,8 @@ function getDailyClosingBundle(deviceId, username) {
         success: true,
         date: todayStr,
         totalItems: prefillItems.length,
-        items: prefillItems
+        items: prefillItems,
+        missingProductCodes: missingSuggestionCodes
       },
       summary: {
         totalItems: summaryBuilt.totalItems,

@@ -49,6 +49,18 @@ PWA; the new event is not available in older backend deployments.
 Run the read-only endpoint regression tests with
 `node --test scripts/purchasing-history.test.cjs`.
 
+## Consumption
+
+Daily Closing suggests full-day ingredient quantities from the outlet's current
+Orders and BOM, with the largest suggestions first. Saving adds new consumption
+entries; the form warns when entries already exist today. Consumption Summary
+shows the existing stock key figures. Daily Consumption Report groups recorded
+entries by business date and product for a selected date range.
+
+The closing, save, and history events go through the Orchestrator to authorized
+workers and read or write through `Repo`. Deploy the Apps Script backend before
+the updated PWA.
+
 ## Migration guide (Apps Script -> TypeScript)
 
 The client never calls Google Sheets directly. It calls the Apps Script backend

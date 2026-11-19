@@ -53,6 +53,9 @@ var Orchestrator = {
     'stock.report.requested': ['stockReport'],
     'stock.history.status.requested': ['stockHistoryStatus'],
     'stock.history.schedule.requested': ['stockHistorySchedule'],
+    'consumption.closing.requested': ['consumptionClosing'],
+    'consumption.recorded': ['consumptionRecord'],
+    'consumption.history.requested': ['consumptionHistory'],
     'report.requested':   ['reporting', 'reflection'],
     'catalog.requested':  ['catalog']
   },
@@ -66,6 +69,9 @@ var Orchestrator = {
     stockReport: function (payload, ctx, bag) { return InventoryWorker.getStockReport(payload, ctx); },
     stockHistoryStatus: function (payload, ctx, bag) { return InventoryWorker.getStockHistoryJobStatus(payload, ctx); },
     stockHistorySchedule: function (payload, ctx, bag) { return InventoryWorker.scheduleStockHistoryJob(payload, ctx); },
+    consumptionClosing: function (payload, ctx, bag) { return InventoryWorker.getDailyClosing(payload, ctx); },
+    consumptionRecord: function (payload, ctx, bag) { return InventoryWorker.recordConsumption(payload, ctx); },
+    consumptionHistory: function (payload, ctx, bag) { return ReportingWorker.consumptionHistory(payload, ctx); },
     reporting:  function (payload, ctx, bag) { return ReportingWorker.generateReport((payload && payload.reportType) || 'dailyClosing', payload, ctx); },
     reflection: function (payload, ctx, bag) { return ReflectionAgent.validate(bag.reporting, ctx); },
     catalog:    function (payload, ctx, bag) { return InventoryWorker.listProducts(ctx, payload); }

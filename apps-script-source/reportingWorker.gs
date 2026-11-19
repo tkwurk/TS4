@@ -15,6 +15,53 @@
 // validation before it reaches the Orchestrator.
 var ReportingWorker = {
 
+  // Copilot: Report daily recorded consumption totals for the authenticated outlet.
+  consumptionHistory: function (params, ctx) {
+    var session = requirePermission_(params, 'inventoryConsumption');
+    var outlet = String(session.outlet || '').trim();
+    if (!outlet) throw new Error('Outlet is required for consumption history.');
+    function validDate(value) {
+      if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+      var date = new Date(value + 'T00:00:00Z');
+      return !isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+    }
+    if (!validDate(params.startDate) || !validDate(params.endDate) || params.startDate > params.endDate) {
+      throw new Error('A valid consumption history date range is required.');
+    }
+    var table = Repo.readTable('INVENTORY_CONSUMPTION');
+    if (!table.headers.length) throw new Error('Inventory_Consumption is missing or has no headers.');
+    var required = ['Timestamp', 'Product Code', 'Quantity Consumed', 'Outlet'];
+    required.forEach(function (name) {
+      if (!table.headers.some(function (header) { return header.toLowerCase() === name.toLowerCase(); })) {
+        throw new Error('Inventory_Consumption is missing the ' + name + ' column.');
+      }
+    });
+    var names = getProductNamesByCode();
+    var units = {};
+    getBuyTypeProducts().forEach(function (product) { units[normalizeProductCodeKey_(product.productCode)] = product.unit || ''; });
+    var groups = {};
+    table.rows.forEach(function (row) {
+      if (canonicalOutletKey_(ReportingWorker._field_(row, 'Outlet')) !== canonicalOutletKey_(outlet)) return;
+      var code = normalizeProductCodeKey_(ReportingWorker._field_(row, 'Product Code'));
+      if (!code) return;
+      var date = parseSheetDate_(ReportingWorker._field_(row, 'Timestamp'));
+      if (!date) throw new Error('Inventory_Consumption contains an invalid timestamp for ' + code + '.');
+      var day = getAppDateKey_(date);
+      if (day < params.startDate || day > params.endDate) return;
+      var quantity = Number(ReportingWorker._field_(row, 'Quantity Consumed'));
+      if (!isFinite(quantity) || quantity <= 0) throw new Error('Inventory_Consumption contains an invalid quantity for ' + code + '.');
+      var key = JSON.stringify([day, code]);
+      if (!groups[key]) groups[key] = { date: day, productCode: code, name: names[code] || code, unit: units[code] || '', quantity: 0 };
+      groups[key].quantity += quantity;
+    });
+    var rows = Object.keys(groups).map(function (key) {
+      groups[key].quantity = Math.round(groups[key].quantity * 1000) / 1000;
+      return groups[key];
+    });
+    rows.sort(function (a, b) { return b.date.localeCompare(a.date) || b.quantity - a.quantity || a.name.localeCompare(b.name); });
+    return apiOk({ rows: rows }, 'CONSUMPTION_HISTORY_OK');
+  },
+
   // Copilot: Return all purchase lines for the authenticated outlet, optionally grouped by product or Monday-based week.
   purchaseHistory: function (params, ctx) {
     var session = requirePermission_(params, params.local === true ? 'purchasingLocal' : 'purchasing');

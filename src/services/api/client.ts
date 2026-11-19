@@ -99,6 +99,12 @@ export const api = {
     callOrchestratedStep<T>('stock.history.status.requested', 'stockHistoryStatus', {}, auth),
   scheduleStockHistory: <T = unknown>(hour: number, auth?: AuthContext) =>
     callOrchestratedStep<T>('stock.history.schedule.requested', 'stockHistorySchedule', { hour }, auth),
+  consumptionClosing: <T = unknown>(auth?: AuthContext) =>
+    callOrchestratedStep<T>('consumption.closing.requested', 'consumptionClosing', {}, auth),
+  recordConsumption: <T = unknown>(payload: ApiPayload, auth?: AuthContext) =>
+    callOrchestratedStep<T>('consumption.recorded', 'consumptionRecord', payload, auth),
+  consumptionHistory: <T = unknown>(startDate: string, endDate: string, auth?: AuthContext) =>
+    callOrchestratedStep<T>('consumption.history.requested', 'consumptionHistory', { startDate, endDate }, auth),
   products: <T = unknown>(payload: ApiPayload = {}, auth?: AuthContext) =>
     callApi<T>('catalog.requested', payload, auth),
   login: <T = unknown>(payload: ApiPayload) => callApi<T>('auth.login', payload),

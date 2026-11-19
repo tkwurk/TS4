@@ -130,8 +130,6 @@ var RPC_ALLOWED = {
   updateCookRequestStatusSecure: 1, getCookingHistorySecure: 1, getCookingTodayReportSecure: 1,
   // purchasing / receive / local
   getProductsSecure: 1, getOrderedPurchases: 1, updateReceiveQuantitySecure: 1, getExpenseAccounts: 1,
-  // consumption
-  getDailyClosingBundleSecure: 1, recordInventoryConsumptionSecure: 1,
   // deposits
   recordDepositSecure: 1, getDepositAccounts: 1, getDepositHistory: 1,
   // investments
@@ -158,10 +156,10 @@ var RPC_ALLOWED = {
   getSmartPicksTriggerInfoSecure: 1, scheduleSmartPicksTriggerSecure: 1, removeSmartPicksTriggerSecure: 1, refreshSmartPicksSecure: 1,
   getCookingAlertStatusSecure: 1, installCookingAlertTriggerSecure: 1, removeCookingAlertTriggerSecure: 1, runCookingAlertSweepNowSecure: 1,
   // purchases / inventory
-  recordPurchaseSecure: 1, recordInventoryConsumptionSecure: 1,
+  recordPurchaseSecure: 1,
   // reports
   getPnLBundle: 1, getCashSummary: 1, getSalesSummaryByDate: 1,
-  getDailyClosingBundle: 1, getMonthlyUsageReport: 1,
+  getMonthlyUsageReport: 1,
   // misc
   getOutlets: 1
 };

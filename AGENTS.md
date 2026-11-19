@@ -71,7 +71,8 @@ they cannot move to the client.
 New capability = a new `eventType` routed by the Orchestrator to a Worker that
 calls `Repo`. Known events include `checkout.completed`, `stock.updated`,
 `stock.report.requested`, `stock.history.status.requested`,
-`stock.history.schedule.requested`, `report.requested`, and `purchase.recorded`.
+`stock.history.schedule.requested`, `consumption.closing.requested`,
+`consumption.recorded`, `consumption.history.requested`, `report.requested`, and `purchase.recorded`.
 Keep the `// Copilot:` intent comment above each worker method.
 
 ## Shared context object

@@ -194,7 +194,8 @@ function buildConsumptionPrefillItems_(businessDateStr, outlet, options) {
 /**
  * Read Inventory_Consumption rows for one business date + outlet (bottom-up scan).
  */
-function readInventoryConsumptionForDate_(businessDateStr, outlet) {
+function readInventoryConsumptionForDate_(businessDateStr, outlet, options) {
+  options = options || {};
   var batchSize = CONSUMPTION_ORDER_BATCH_SIZE || 500;
   var firstBatch = Repo.readRowsFromEnd('INVENTORY_CONSUMPTION', 0, batchSize);
   if (!firstBatch.headers.length || !firstBatch.totalRows) {
@@ -209,6 +210,7 @@ function readInventoryConsumptionForDate_(businessDateStr, outlet) {
   if (timestampIdx < 0 || productCodeIdx < 0 || quantityIdx < 0) {
     throw new Error('Inventory_Consumption is missing a date, product code, or quantity column.');
   }
+  if (options.strictOutlet && outletIdx < 0) throw new Error('Inventory_Consumption is missing an outlet column.');
 
   var consumptionMap = {};
   var rowsScanned = 0;
@@ -226,15 +228,17 @@ function readInventoryConsumptionForDate_(businessDateStr, outlet) {
       rowsScanned++;
       var row = batch[i];
       if (outletKey && outletIdx >= 0) {
-        if (typeof outletRowMatchesUser_ === 'function') {
+        if (options.strictOutlet) {
+          if (canonicalOutletKey_(row[outletIdx]) !== canonicalOutletKey_(outletKey)) continue;
+        } else if (typeof outletRowMatchesUser_ === 'function') {
           if (!outletRowMatchesUser_(row[outletIdx], outletKey)) continue;
         } else if (String(row[outletIdx] || '').trim() !== outletKey) {
           continue;
         }
       }
       if (timestampIdx < 0 || !row[timestampIdx]) continue;
-      var ts = row[timestampIdx] instanceof Date ? row[timestampIdx] : new Date(row[timestampIdx]);
-      if (isNaN(ts.getTime())) continue;
+      var ts = parseSheetDate_(row[timestampIdx]);
+      if (!ts) continue;
       var dateStr = typeof getAppDateKey_ === 'function'
         ? getAppDateKey_(ts)
         : formatDateForComparison(ts);

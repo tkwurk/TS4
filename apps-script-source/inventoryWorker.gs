@@ -99,6 +99,62 @@ var InventoryWorker = {
     }, 'STOCK_OK');
   },
 
+  // Copilot: Build the daily closing form from today's orders for the authenticated outlet.
+  getDailyClosing: function (payload, ctx) {
+    var session = requirePermission_(payload, 'inventoryConsumption');
+    if (!String(session.outlet || '').trim()) throw new Error('Outlet is required for daily closing.');
+    var result = getDailyClosingBundle(session.deviceId, session.username, { session: session, repoOnly: true });
+    if (!result.success) return apiFail(result.error || 'Daily closing is unavailable.', 'DAILY_CLOSING_FAILED');
+    return apiOk(result, 'DAILY_CLOSING_OK');
+  },
+
+  // Copilot: Record validated consumption for the authenticated outlet through Repo.
+  recordConsumption: function (payload, ctx) {
+    var session = requirePermission_(payload, 'inventoryConsumption');
+    var outlet = String(session.outlet || '').trim();
+    if (!outlet) throw new Error('Outlet is required for recording consumption.');
+    if (!Array.isArray(payload.items) || !payload.items.length) throw new Error('At least one consumption item is required.');
+    var requestId = String(payload.clientRequestId || '').trim();
+    if (!/^[a-zA-Z0-9_-]{1,120}$/.test(requestId)) throw new Error('A valid consumption request ID is required.');
+    var products = {};
+    getBuyTypeProducts().forEach(function (product) {
+      products[normalizeProductCodeKey_(product.productCode)] = product.productCode;
+    });
+    var seen = {};
+    var entries = payload.items.map(function (item) {
+      var key = normalizeProductCodeKey_(item && item.productCode);
+      var quantity = item && item.quantity;
+      if (!key || !products[key] || seen[key]) throw new Error('Invalid or duplicate consumption product: ' + key);
+      if (typeof quantity !== 'number' || !isFinite(quantity) || quantity <= 0) {
+        throw new Error('Consumption quantity must be a positive number.');
+      }
+      seen[key] = true;
+      return { code: products[key], quantity: quantity };
+    });
+    var cacheKey = buildIdempotencyCacheKey_('inv_consume_' + session.username + '_' + session.deviceId + '_', requestId);
+    var lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      var cache = CacheService.getScriptCache();
+      var cached = cache.get(cacheKey);
+      if (cached) return apiOk(JSON.parse(cached), 'CONSUMPTION_RECORDED');
+      var headers = ['Timestamp', 'Product Code', 'Quantity Consumed', 'Outlet', 'Username'];
+      Repo.ensureTable('INVENTORY_CONSUMPTION', headers);
+      var now = formatTimestampForSheet(new Date());
+      Repo.appendObjects('INVENTORY_CONSUMPTION', entries.map(function (entry) {
+        return {
+          'Timestamp': now, 'Product Code': entry.code, 'Quantity Consumed': entry.quantity,
+          'Outlet': outlet, 'Username': session.username
+        };
+      }));
+      var response = { message: 'Inventory consumption recorded successfully', count: entries.length };
+      cache.put(cacheKey, JSON.stringify(response), 600);
+      return apiOk(response, 'CONSUMPTION_RECORDED');
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
   // Copilot: Expose stock-history trigger status to authorized administrators.
   getStockHistoryJobStatus: function (payload, ctx) {
     requirePermission_(payload, 'adminOrders');

@@ -24,6 +24,16 @@ function _stockBusinessDateKey_(date) {
     : formatDateForComparison(date);
 }
 
+function _stockSnapshotDateKey_(value) {
+  if (!value) return '';
+  if (value instanceof Date) return _stockBusinessDateKey_(value);
+  var dateKey = String(value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    throw new Error('Invalid Stock_History AsOfDate: ' + dateKey);
+  }
+  return dateKey;
+}
+
 function _todayBusinessDateStr_() {
   return _stockBusinessDateKey_(new Date());
 }
@@ -338,7 +348,7 @@ function readStockHistorySnapshot_(outlet) {
   for (var i = data.length - 1; i >= 1; i--) {
     var rowOutlet = String(data[i][1] || '').trim();
     if (outletKey && rowOutlet !== outletKey) continue;
-    var asOf = String(data[i][0] || '').trim();
+    var asOf = _stockSnapshotDateKey_(data[i][0]);
     if (!asOf) continue;
     if (!latestDate || asOf > latestDate) latestDate = asOf;
   }
@@ -351,7 +361,7 @@ function readStockHistorySnapshot_(outlet) {
   for (var r = 1; r < data.length; r++) {
     var row = data[r];
     if (String(row[1] || '').trim() !== outletKey) continue;
-    if (String(row[0] || '').trim() !== latestDate) continue;
+    if (_stockSnapshotDateKey_(row[0]) !== latestDate) continue;
     var code = _normalizeStockCode_(row[2]);
     if (!code) continue;
     byCode[code] = {
@@ -653,6 +663,9 @@ function runNightlyStockHistoryJob(businessDateStr, options) {
   options = options || {};
   ensureStockHistorySheet_();
 
+  if (businessDateStr && typeof businessDateStr === 'object') {
+    businessDateStr = undefined;
+  }
   var businessDate = businessDateStr || (typeof getYesterdayBusinessDateStr_ === 'function'
     ? getYesterdayBusinessDateStr_()
     : _todayBusinessDateStr_());
@@ -756,13 +769,28 @@ function getNightlyStockHistoryTriggerInfo() {
   });
   var props = PropertiesService.getScriptProperties();
   var scheduledHour = props.getProperty('STOCK_HISTORY_SCHEDULE_HOUR');
+  var historyData = _stockRepoValues_('STOCK_HISTORY');
+  var latestByOutlet = {};
+  for (var i = 1; i < historyData.length; i++) {
+    var outlet = String(historyData[i][1] || '').trim();
+    var asOfDate = _stockSnapshotDateKey_(historyData[i][0]);
+    if (!outlet || !asOfDate) continue;
+    if (!latestByOutlet[outlet] || asOfDate > latestByOutlet[outlet]) {
+      latestByOutlet[outlet] = asOfDate;
+    }
+  }
+  var historyThrough = null;
+  Object.keys(latestByOutlet).forEach(function (outlet) {
+    var asOfDate = latestByOutlet[outlet];
+    if (!historyThrough || asOfDate < historyThrough) historyThrough = asOfDate;
+  });
   return {
     triggerActive: !!found,
     trigger: found,
     scheduleHour: scheduledHour === null ? null : Number(scheduledHour),
     timeZone: Session.getScriptTimeZone(),
     lastRun: props.getProperty('STOCK_HISTORY_LAST_RUN') || null,
-    lastBusinessDate: props.getProperty('STOCK_HISTORY_LAST_DATE') || null,
+    lastBusinessDate: historyThrough,
     sheetName: SHEETS.STOCK_HISTORY
   };
 }

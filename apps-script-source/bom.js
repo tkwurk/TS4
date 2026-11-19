@@ -578,7 +578,8 @@ function computeCombinedConsumptionForOutlet_(businessDate, outlet, bomRecipes, 
   var orderScan = options.orderScan || readOrderRowsForDate_(businessDate, outlet, {
     productIndex: productIndex,
     preferBottomUp: options.preferBottomUp,
-    batchSize: options.batchSize
+    batchSize: options.batchSize,
+    strictOutlet: options.strictOutlet
   });
   var soldMap = orderScan.soldMap || {};
   var bomLookup = bomRecipes.byUnitLookup || buildBomUnitLookup_(bomRecipes.byUnitProduct || {}, productIndex);
@@ -680,6 +681,9 @@ function readOrderRowsForDate_(businessDateStr, outlet, options) {
   var nameIdx = headerRow.findIndex(function(h) { return h && /product.*name|^name$/i.test(h.toString()); });
   var qtyIdx = headerRow.findIndex(function(h) { return h && /qty|quantity/i.test(h.toString()); });
   var outletIdx = headerRow.findIndex(function(h) { return h && /outlet/i.test(h.toString()); });
+  if (options.strictOutlet && (outletIdx < 0 || dateIdx < 0)) {
+    throw new Error('Orders is missing a date or outlet column.');
+  }
   var productIndex = options.productIndex || (typeof getCachedProductCodeIndex_ === 'function'
     ? getCachedProductCodeIndex_()
     : loadProductCodeIndex_());
@@ -701,6 +705,7 @@ function readOrderRowsForDate_(businessDateStr, outlet, options) {
 
   function rowMatchesOutlet_(row) {
     if (!outlet || outletIdx === -1) return true;
+    if (options.strictOutlet) return canonicalOutletKey_(row[outletIdx]) === canonicalOutletKey_(outlet);
     if (typeof outletRowMatchesUser_ === 'function') {
       return outletRowMatchesUser_(row[outletIdx], outlet);
     }
@@ -1019,8 +1024,10 @@ function getDistinctOutletsForConsumption_() {
     var outletName = '';
     var outletId = '';
     keys.forEach(function (key) {
-      if (/name|outlet/i.test(key.trim())) outletName = outletName || row[key];
-      else if (/id/i.test(key.trim())) outletId = outletId || row[key];
+      var normalizedKey = key.trim();
+      if (/\bname\b/i.test(normalizedKey)) outletName = outletName || row[key];
+      else if (/\bid\b/i.test(normalizedKey)) outletId = outletId || row[key];
+      else if (/outlet/i.test(normalizedKey)) outletName = outletName || row[key];
     });
     var name = String(outletName || outletId || '').trim();
     if (name) outletSet[name] = true;
