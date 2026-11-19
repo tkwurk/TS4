@@ -280,6 +280,10 @@ export const dict: Record<Lang, Record<string, string>> = {
     'stock.purchased': 'Purchased',
     'stock.consumed': 'Consumed',
     'stock.lowOnly': 'Out of stock only',
+    'stock.status': 'Stock status',
+    'stock.inStock': 'In stock',
+    'stock.uncategorized': 'Uncategorized',
+    'stock.sortHint': 'Click a column heading to sort.',
     'stock.none': 'No stock data.',
     'stock.historyIncomplete': 'Stock history is incomplete — totals may be partial.',
 
@@ -799,6 +803,10 @@ export const dict: Record<Lang, Record<string, string>> = {
     'stock.purchased': 'Dibeli',
     'stock.consumed': 'Dipakai',
     'stock.lowOnly': 'Hanya stok habis',
+    'stock.status': 'Status stok',
+    'stock.inStock': 'Tersedia',
+    'stock.uncategorized': 'Tanpa kategori',
+    'stock.sortHint': 'Klik judul kolom untuk mengurutkan.',
     'stock.none': 'Tidak ada data stok.',
     'stock.historyIncomplete': 'Riwayat stok belum lengkap — total mungkin sebagian.',
 
