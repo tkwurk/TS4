@@ -300,10 +300,14 @@ function _readPurchaseQtyByCodeForDate_(outlet, businessDateStr, purchaseDateInd
   if (purchaseDateIndex) {
     return purchaseDateIndex[businessDateStr] || {};
   }
+  // Purchases are append-ordered by timestamp, so scan bounded batches from the
+  // bottom and stop at the first row dated before businessDateStr — the live
+  // report only pays for the current day's rows, not the whole sheet.
   var purchaseQty = {};
-  var purchaseData = _stockRepoValues_('PURCHASES');
-  if (purchaseData.length < 2) return purchaseQty;
-  var phHeaders = purchaseData[0];
+  var batchSize = typeof CONSUMPTION_ORDER_BATCH_SIZE !== 'undefined' ? CONSUMPTION_ORDER_BATCH_SIZE : 500;
+  var firstBatch = Repo.readRowsFromEnd('PURCHASES', 0, batchSize);
+  if (!firstBatch.headers.length || !firstBatch.totalRows) return purchaseQty;
+  var phHeaders = firstBatch.headers;
   var phDateIdx = phHeaders.findIndex(function(h) { return h && /date|timestamp/i.test(h.toString()); });
   var phCodeIdx = phHeaders.findIndex(function(h) { return h && /code/i.test(h.toString()); });
   var phRQtyIdx = phHeaders.findIndex(function(h) { return h && /rquantity/i.test(h.toString()); });
@@ -314,25 +318,40 @@ function _readPurchaseQtyByCodeForDate_(outlet, businessDateStr, purchaseDateInd
   if (phDateIdx < 0 || phCodeIdx < 0 || phQtyIdx < 0) {
     throw new Error('Purchases is missing a date, product code, or quantity column.');
   }
-  purchaseData.slice(1).forEach(function(row) {
-    if (phOutletIdx !== -1 && outlet) {
-      if (typeof outletRowMatchesUser_ === 'function') {
-        if (!outletRowMatchesUser_(row[phOutletIdx], outlet)) return;
-      } else if (row[phOutletIdx] !== outlet) return;
+  var offset = 0;
+  while (offset < firstBatch.totalRows) {
+    var batchInfo = offset === 0
+      ? firstBatch
+      : Repo.readRowsFromEnd('PURCHASES', offset, batchSize, firstBatch.totalRows);
+    var batch = batchInfo.rows.map(function (row) {
+      return phHeaders.map(function (header) { return row[header]; });
+    });
+    if (!batch.length) break;
+    for (var i = batch.length - 1; i >= 0; i--) {
+      var row = batch[i];
+      var rawDate = row[phDateIdx];
+      if (!rawDate) continue;
+      var parsed = typeof parsePurchaseDate === 'function'
+        ? parsePurchaseDate(rawDate)
+        : (rawDate instanceof Date ? rawDate : new Date(rawDate));
+      if (!parsed || isNaN(parsed.getTime())) continue;
+      var dateStr = _stockBusinessDateKey_(parsed);
+      if (!dateStr) continue;
+      if (dateStr < businessDateStr) return purchaseQty;
+      if (dateStr !== businessDateStr) continue;
+      if (phOutletIdx !== -1 && outlet) {
+        if (typeof outletRowMatchesUser_ === 'function') {
+          if (!outletRowMatchesUser_(row[phOutletIdx], outlet)) continue;
+        } else if (row[phOutletIdx] !== outlet) continue;
+      }
+      var code = (row[phCodeIdx] || '').toString().trim();
+      var qty = Number(row[phQtyIdx]) || 0;
+      if (!code || qty === 0) continue;
+      var nk = _normalizeStockCode_(code);
+      purchaseQty[nk] = (purchaseQty[nk] || 0) + qty;
     }
-    if (!row[phDateIdx]) return;
-    var rawDate = row[phDateIdx];
-    var parsed = typeof parsePurchaseDate === 'function'
-      ? parsePurchaseDate(rawDate)
-      : (rawDate instanceof Date ? rawDate : new Date(rawDate));
-    if (!parsed || isNaN(parsed.getTime())) return;
-    if (_stockBusinessDateKey_(parsed) !== businessDateStr) return;
-    var code = (row[phCodeIdx] || '').toString().trim();
-    var qty = Number(row[phQtyIdx]) || 0;
-    if (!code || qty === 0) return;
-    var nk = _normalizeStockCode_(code);
-    purchaseQty[nk] = (purchaseQty[nk] || 0) + qty;
-  });
+    offset += batch.length;
+  }
   return purchaseQty;
 }
 
