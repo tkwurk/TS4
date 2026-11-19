@@ -33,6 +33,97 @@ var InventoryWorker = {
   },
 
   /**
+   * Builds the Stock report from the Repo-backed ledger for the authenticated outlet.
+   */
+  getStockReport: function (payload, ctx) {
+    var session = requirePermission_(payload, 'stockReport');
+    var outlet = String(session.outlet || '').trim();
+    var requestedOutlet = String((payload && payload.outlet) || '').trim();
+    if (!outlet) return apiFail('No outlet is assigned to this account.', 'STOCK_NO_OUTLET');
+    if (requestedOutlet && canonicalOutletKey_(requestedOutlet) !== canonicalOutletKey_(outlet)) {
+      return apiFail('Requested outlet is not authorized.', 'STOCK_OUTLET_FORBIDDEN');
+    }
+
+    var totals = getStockTotalsForOutlet_(outlet, { requireCompleteHistory: true }) || {};
+    if (totals.historyIncomplete) {
+      return apiFail(
+        'Stock history is not current yet. The scheduled stock-history job must complete before this report is available.',
+        'STOCK_HISTORY_NOT_READY'
+      );
+    }
+
+    var nameByCode = {};
+    Repo.readRows('PRODUCTS').forEach(function (row) {
+      var code = InventoryWorker._fieldCI_(row, 'Product Code') || InventoryWorker._fieldCI_(row, 'Code');
+      if (!code) return;
+      var key = normalizeProductCodeKey_(code);
+      nameByCode[key] = {
+        name: InventoryWorker._fieldCI_(row, 'Name', 'Product Name') || key,
+        unit: InventoryWorker._fieldCI_(row, 'Buy Unit', 'BuyUnit', 'Unit') || '',
+        category: InventoryWorker._fieldCI_(row, 'Category') || ''
+      };
+    });
+
+    var purchased = totals.purchased || {};
+    var consumed = totals.consumed || {};
+    var sold = totals.sold || {};
+    var codes = {};
+    [purchased, consumed, sold].forEach(function (map) {
+      Object.keys(map).forEach(function (code) { codes[code] = true; });
+    });
+    var items = Object.keys(codes).map(function (code) {
+      var meta = nameByCode[normalizeProductCodeKey_(code)] || {};
+      var p = Number(purchased[code]) || 0;
+      var c = Number(consumed[code]) || 0;
+      var s = Number(sold[code]) || 0;
+      return {
+        productCode: code,
+        name: meta.name || code,
+        unit: meta.unit || '',
+        category: meta.category || '',
+        purchased: p,
+        consumed: c,
+        sold: s,
+        remaining: Math.round((p - c - s) * 1000) / 1000
+      };
+    });
+    items.sort(function (a, b) { return a.remaining - b.remaining; });
+
+    return apiOk({
+      outlet: outlet,
+      items: items,
+      stockSource: totals.stockSource || '',
+      historyAsOfDate: totals.historyAsOfDate || '',
+      todayDate: totals.todayDate || '',
+      historyIncomplete: false
+    }, 'STOCK_OK');
+  },
+
+  // Copilot: Expose stock-history trigger status to authorized administrators.
+  getStockHistoryJobStatus: function (payload, ctx) {
+    requirePermission_(payload, 'adminOrders');
+    if (typeof getNightlyStockHistoryTriggerInfo !== 'function') {
+      return apiFail('Stock history trigger status is unavailable.', 'STOCK_HISTORY_STATUS_UNAVAILABLE');
+    }
+    return apiOk(getNightlyStockHistoryTriggerInfo(), 'STOCK_HISTORY_JOB_STATUS');
+  },
+
+  // Copilot: Schedule the stock-history batch job in the Apps Script timezone.
+  scheduleStockHistoryJob: function (payload, ctx) {
+    requirePermission_(payload, 'adminOrders');
+    var rawHour = payload && payload.hour;
+    var hour = Number(rawHour);
+    if (rawHour === undefined || rawHour === null || String(rawHour).trim() === '' ||
+        !isFinite(hour) || Math.floor(hour) !== hour || hour < 0 || hour > 23) {
+      return apiFail('Schedule hour must be an integer from 0 to 23.', 'STOCK_HISTORY_INVALID_HOUR');
+    }
+    if (typeof scheduleNightlyStockHistoryTrigger !== 'function') {
+      return apiFail('Stock history trigger scheduling is unavailable.', 'STOCK_HISTORY_SCHEDULE_UNAVAILABLE');
+    }
+    return apiOk(scheduleNightlyStockHistoryTrigger(hour), 'STOCK_HISTORY_JOB_SCHEDULED');
+  },
+
+  /**
    * Records a restock (purchase). `payload` is the params object the client
    * already sends to recordPurchaseSecure (purchase data + _authContext).
    * @return {Object} apiOk/apiFail envelope from the existing purchase logic.
@@ -87,12 +178,16 @@ var InventoryWorker = {
     return apiOk({ outlet: outlet || null, count: list.length, products: list }, 'PRODUCTS_LISTED');
   },
 
-  /** Case-insensitive lookup of a header-keyed field value. */
-  _fieldCI_: function (obj, name) {
-    var up = name.toUpperCase();
-    var keys = Object.keys(obj);
-    for (var i = 0; i < keys.length; i++) {
-      if (keys[i].toString().trim().toUpperCase() === up) return obj[keys[i]];
+  /** Case-insensitive lookup of a header-keyed field value with aliases. */
+  _fieldCI_: function (obj) {
+    var keys = Object.keys(obj || {});
+    for (var n = 1; n < arguments.length; n++) {
+      var up = String(arguments[n] || '').trim().toUpperCase();
+      for (var i = 0; up && i < keys.length; i++) {
+        if (keys[i].toString().trim().toUpperCase() !== up) continue;
+        var value = obj[keys[i]];
+        if (value !== '' && value !== null && value !== undefined) return value;
+      }
     }
     return undefined;
   },

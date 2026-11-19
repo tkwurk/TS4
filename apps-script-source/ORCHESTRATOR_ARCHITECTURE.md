@@ -181,6 +181,9 @@ var Orchestrator = {
   ROUTES: {
     'checkout.completed':  ['sales', 'inventory', 'reporting', 'reflection'],
     'stock.updated':       ['inventory', 'reporting', 'reflection'],
+    'stock.report.requested': ['stockReport'],
+    'stock.history.status.requested': ['stockHistoryStatus'],
+    'stock.history.schedule.requested': ['stockHistorySchedule'],
     'report.requested':    ['reporting', 'reflection'],
     'purchase.recorded':   ['inventory', 'reporting', 'reflection']
   },

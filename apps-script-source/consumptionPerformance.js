@@ -195,28 +195,33 @@ function buildConsumptionPrefillItems_(businessDateStr, outlet, options) {
  * Read Inventory_Consumption rows for one business date + outlet (bottom-up scan).
  */
 function readInventoryConsumptionForDate_(businessDateStr, outlet) {
-  var sheet = getGlobalSpreadsheet().getSheetByName(SHEETS.INVENTORY_CONSUMPTION);
-  if (!sheet || sheet.getLastRow() < 2) {
+  var batchSize = CONSUMPTION_ORDER_BATCH_SIZE || 500;
+  var firstBatch = Repo.readRowsFromEnd('INVENTORY_CONSUMPTION', 0, batchSize);
+  if (!firstBatch.headers.length || !firstBatch.totalRows) {
     return { consumptionMap: {}, rowsScanned: 0 };
   }
 
-  var lastRow = sheet.getLastRow();
-  var lastCol = Math.max(sheet.getLastColumn(), 5);
-  var headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var headerRow = firstBatch.headers;
   var timestampIdx = headerRow.findIndex(function(h) { return h && /timestamp|date/i.test(h.toString()); });
   var productCodeIdx = headerRow.findIndex(function(h) { return h && /product.*code|code/i.test(h.toString()); });
   var quantityIdx = headerRow.findIndex(function(h) { return h && /quantity/i.test(h.toString()); });
   var outletIdx = headerRow.findIndex(function(h) { return h && /outlet/i.test(h.toString()); });
+  if (timestampIdx < 0 || productCodeIdx < 0 || quantityIdx < 0) {
+    throw new Error('Inventory_Consumption is missing a date, product code, or quantity column.');
+  }
 
   var consumptionMap = {};
   var rowsScanned = 0;
   var outletKey = String(outlet || '').trim();
-  var batchSize = CONSUMPTION_ORDER_BATCH_SIZE;
-  var r = lastRow;
+  var offset = 0;
 
-  while (r >= 2) {
-    var startRow = Math.max(2, r - batchSize + 1);
-    var batch = sheet.getRange(startRow, 1, r - startRow + 1, lastCol).getValues();
+  while (offset < firstBatch.totalRows) {
+    var batchInfo = offset === 0
+      ? firstBatch
+      : Repo.readRowsFromEnd('INVENTORY_CONSUMPTION', offset, batchSize, firstBatch.totalRows);
+    var batch = batchInfo.rows.map(function (row) {
+      return headerRow.map(function (header) { return row[header]; });
+    });
     for (var i = batch.length - 1; i >= 0; i--) {
       rowsScanned++;
       var row = batch[i];
@@ -230,7 +235,9 @@ function readInventoryConsumptionForDate_(businessDateStr, outlet) {
       if (timestampIdx < 0 || !row[timestampIdx]) continue;
       var ts = row[timestampIdx] instanceof Date ? row[timestampIdx] : new Date(row[timestampIdx]);
       if (isNaN(ts.getTime())) continue;
-      var dateStr = formatDateForComparison(ts);
+      var dateStr = typeof getAppDateKey_ === 'function'
+        ? getAppDateKey_(ts)
+        : formatDateForComparison(ts);
       if (dateStr < businessDateStr) return { consumptionMap: consumptionMap, rowsScanned: rowsScanned };
       if (dateStr !== businessDateStr) continue;
 
@@ -239,7 +246,7 @@ function readInventoryConsumptionForDate_(businessDateStr, outlet) {
       if (!productCode || quantity <= 0) continue;
       consumptionMap[productCode] = (consumptionMap[productCode] || 0) + quantity;
     }
-    r = startRow - 1;
+    offset += batch.length;
   }
 
   return { consumptionMap: consumptionMap, rowsScanned: rowsScanned };

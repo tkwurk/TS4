@@ -15,8 +15,10 @@ design and the Google Apps Script constraints.
 
 ```js
 // Copilot: Implement a central Orchestrator agent.
-// Route incoming POS events (checkout.completed, stock.updated, report.requested,
-// purchase.recorded) to the correct worker pipeline. Maintain workflow state,
+// Route incoming POS events (checkout.completed, stock.updated,
+// stock.report.requested, stock.history.status.requested,
+// stock.history.schedule.requested, report.requested, purchase.recorded) to the correct
+// worker pipeline. Maintain workflow state,
 // log every routing decision to WorkflowLog, wrap each hop in ErrorHandler, and
 // return the Reflection-validated final output. Do NOT contain business logic.
 var Orchestrator = {
@@ -46,10 +48,11 @@ var SalesWorker = {
 // Copilot: Implement an Inventory Worker agent for stock updates and restocking.
 // After a checkout, apply consumption to the stock ledger; for purchases, apply
 // restock. Delegate to recordInventoryConsumptionSecure, the stock-history
-// advance functions, and recordPurchaseSecure unchanged. Return the applied
-// deltas so the Orchestrator can trigger the Reporting Worker.
+// advance functions, and recordPurchaseSecure unchanged. Serve stock reports
+// from Repo-backed history plus the current day's tail scan.
 var InventoryWorker = {
   updateStock: function (payload, ctx) { /* delegates to consumption/stock-history */ },
+  getStockReport: function (payload, ctx) { /* reads stock history + today's deltas through Repo */ },
   restock:     function (payload, ctx) { /* delegates to recordPurchaseSecure */ }
 };
 ```

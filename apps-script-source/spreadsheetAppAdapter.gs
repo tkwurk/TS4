@@ -47,6 +47,49 @@ var SpreadsheetAppAdapter = {
     return sheet.getDataRange().getValues();
   },
 
+  getValuesFromEnd: function (name, offset, count, anchorTotalRows) {
+    var sheet = this._sheet(name);
+    if (!sheet || sheet.getLastRow() === 0) {
+      return { headers: [], rows: [], startRow: 2, totalRows: 0 };
+    }
+
+    var lastRow = sheet.getLastRow();
+    var lastColumn = Math.max(sheet.getLastColumn(), 1);
+    var headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map(function (h) {
+      return (h == null ? '' : String(h)).trim();
+    });
+    var availableRows = Math.max(0, lastRow - 1);
+    var totalRows = anchorTotalRows === undefined
+      ? availableRows
+      : Math.min(availableRows, Math.max(0, Number(anchorTotalRows) || 0));
+    var endIndex = Math.max(0, totalRows - Math.max(0, Number(offset) || 0));
+    var startIndex = Math.max(0, endIndex - Math.max(0, Number(count) || 0));
+    var rowCount = endIndex - startIndex;
+    return {
+      headers: headers,
+      rows: rowCount ? sheet.getRange(startIndex + 2, 1, rowCount, lastColumn).getValues() : [],
+      startRow: startIndex + 2,
+      totalRows: totalRows
+    };
+  },
+
+  ensureTable: function (name, headers) {
+    var sheet = this._sheet(name);
+    if (!sheet) sheet = getGlobalSpreadsheet().insertSheet(name);
+    if (sheet.getLastRow() === 0) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      return true;
+    }
+
+    var existing = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
+    for (var i = 0; i < headers.length; i++) {
+      if (String(existing[i] || '').trim() !== String(headers[i] || '').trim()) {
+        throw new Error('SpreadsheetAppAdapter.ensureTable: header mismatch in ' + name);
+      }
+    }
+    return true;
+  },
+
   appendRows: function (range, rows) {
     if (!rows || !rows.length) return { updatedRows: 0 };
     var p = this._parse(range);

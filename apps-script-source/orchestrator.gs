@@ -50,6 +50,9 @@ var Orchestrator = {
     'purchase.recorded':  ['restock', 'reporting', 'reflection'],
     'purchase.history.requested': ['purchaseHistory'],
     'stock.updated':      ['inventory', 'reporting', 'reflection'],
+    'stock.report.requested': ['stockReport'],
+    'stock.history.status.requested': ['stockHistoryStatus'],
+    'stock.history.schedule.requested': ['stockHistorySchedule'],
     'report.requested':   ['reporting', 'reflection'],
     'catalog.requested':  ['catalog']
   },
@@ -60,6 +63,9 @@ var Orchestrator = {
     inventory:  function (payload, ctx, bag) { return InventoryWorker.updateStock(payload, ctx); },
     restock:    function (payload, ctx, bag) { return InventoryWorker.restock(payload, ctx); },
     purchaseHistory: function (payload, ctx, bag) { return ReportingWorker.purchaseHistory(payload, ctx); },
+    stockReport: function (payload, ctx, bag) { return InventoryWorker.getStockReport(payload, ctx); },
+    stockHistoryStatus: function (payload, ctx, bag) { return InventoryWorker.getStockHistoryJobStatus(payload, ctx); },
+    stockHistorySchedule: function (payload, ctx, bag) { return InventoryWorker.scheduleStockHistoryJob(payload, ctx); },
     reporting:  function (payload, ctx, bag) { return ReportingWorker.generateReport((payload && payload.reportType) || 'dailyClosing', payload, ctx); },
     reflection: function (payload, ctx, bag) { return ReflectionAgent.validate(bag.reporting, ctx); },
     catalog:    function (payload, ctx, bag) { return InventoryWorker.listProducts(ctx, payload); }

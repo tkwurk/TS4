@@ -46,6 +46,13 @@ Repo.appendObjects('ORDERS', { OrderNo: 'A1001', Total: 42.5, Outlet: 'Main' });
 // Append pre-ordered rows
 Repo.appendRows('AUDIT_LOG', [[ new Date(), 'checkout', 'ok' ]]);
 
+// Read newest rows without scanning older rows (optimized by SpreadsheetAppAdapter)
+var recentOrders = Repo.readRowsFromEnd('ORDERS', 0, 500);
+
+// Ensure a table and replace its data rows under the caller's lock
+Repo.ensureTable('STOCK_HISTORY', ['AsOfDate', 'Outlet', 'ProductCode']);
+Repo.replaceRows('STOCK_HISTORY', snapshotRows);
+
 // Overwrite an explicit range
 Repo.updateRange('ORDERS', 'G2:G2', [[ 'PAID' ]]);
 ```
@@ -56,15 +63,28 @@ the legacy 20-column purchase layout, adding investment headers as needed, and
 locks the duplicate check and append. Other legacy purchasing operations have
 not yet been migrated.
 
+## Stock report history
+
+The stock report reads cumulative totals through yesterday from `Stock_History`
+and calculates today from current-day activity. Orders are scanned from the
+bottom in bounded batches and the scan stops at the first earlier business date.
+The nightly job rolls the snapshot forward, or bootstraps/catches it up when
+needed.
+
+After deploying the Apps Script changes, use **PWA Admin → Automation** to
+schedule the job in the script timezone. Scheduling replaces any existing
+stock-history trigger. The first run bootstraps or catches up the history; until
+the snapshot is current through yesterday, the report remains unavailable
+rather than showing partial totals.
+
 ## Migration path
 
-- **Incremental:** new features read/write only through `Repo`. Existing workers
-  that still call `SpreadsheetApp` keep working and are ported collection by
-  collection.
+- **Incremental:** new features read/write only through `Repo`. Existing code
+  that still calls `SpreadsheetApp` is ported collection by collection.
 - **Swap the database later:** implement a new adapter exposing the same methods
-  as the current adapter (`getValues`, `appendRows`, `updateValues`,
-  `clearRange`), then set `Repo.adapter = YourNewAdapter`. No worker or
-  business-logic changes.
+  as the current adapter (`getValues`, `getValuesFromEnd`, `ensureTable`,
+  `appendRows`, `updateValues`, `clearRange`), then set
+  `Repo.adapter = YourNewAdapter`. No worker or business-logic changes.
 
 ## Option B — service-account REST (future, still free)
 
@@ -83,4 +103,6 @@ carry no charge — but requires a one-time Google Cloud setup:
 
 - Workers MUST NOT call `SpreadsheetApp` directly — go through `Repo`.
 - Only an adapter knows the data is in Google Sheets.
+- Workers that replace collection rows must coordinate the read-modify-write
+  operation with the appropriate lock.
 - Any service-account key lives in Script Properties, never in source.

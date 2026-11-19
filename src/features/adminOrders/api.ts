@@ -1,4 +1,4 @@
-import { callPositional, callSecure } from '@/services/api'
+import { api, callPositional, callSecure } from '@/services/api'
 import type { AuthContext } from '@/services/api'
 
 // ---------- Products ----------
@@ -74,6 +74,20 @@ export const scheduleSmartPicks = (hour: number, auth: AuthContext) =>
 export const removeSmartPicks = (auth: AuthContext) => callSecure<{ removed?: number }>('removeSmartPicksTriggerSecure', {}, auth)
 export const refreshSmartPicksNow = (auth: AuthContext) =>
   callSecure<{ message?: string; totalRows?: number; updatedAt?: string }>('refreshSmartPicksSecure', {}, auth)
+
+// ---------- Stock history batch ----------
+export interface StockHistoryJobInfo {
+  triggerActive: boolean
+  scheduleHour?: number | null
+  timeZone?: string
+  lastRun?: string | null
+  lastBusinessDate?: string | null
+  sheetName?: string
+}
+export const fetchStockHistoryJobInfo = (auth: AuthContext) =>
+  api.stockHistoryStatus<StockHistoryJobInfo>(auth)
+export const scheduleStockHistoryJob = (hour: number, auth: AuthContext) =>
+  api.scheduleStockHistory<{ message?: string }>(hour, auth)
 
 // ---------- Cooking stock alerts (auto cook requests + emails) ----------
 export interface CookAlertStatus {

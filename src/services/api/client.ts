@@ -64,6 +64,25 @@ function failEnvelope<T>(error: string, code: string): ApiEnvelope<T> {
   return { success: false, data: null, error, code }
 }
 
+async function callOrchestratedStep<T>(
+  eventType: ApiEventType,
+  step: string,
+  payload: ApiPayload,
+  auth?: AuthContext,
+): Promise<ApiEnvelope<T>> {
+  const response = await callApi<{ steps?: Record<string, ApiEnvelope<T>> }>(eventType, payload, auth)
+  if (!response.success) {
+    return {
+      success: false,
+      data: null,
+      error: response.error,
+      code: response.code,
+    }
+  }
+  const result = response.data?.steps?.[step]
+  return result ?? failEnvelope<T>(`Response step "${step}" is missing.`, 'BAD_RESPONSE')
+}
+
 /** Typed convenience wrappers for the known Orchestrator events. */
 export const api = {
   checkout: <T = unknown>(payload: ApiPayload, auth?: AuthContext) =>
@@ -74,6 +93,12 @@ export const api = {
     callApi<T>('stock.updated', payload, auth),
   report: <T = unknown>(reportType: string, payload: ApiPayload = {}, auth?: AuthContext) =>
     callApi<T>('report.requested', { ...payload, reportType }, auth),
+  stockReport: <T = unknown>(auth?: AuthContext) =>
+    callOrchestratedStep<T>('stock.report.requested', 'stockReport', {}, auth),
+  stockHistoryStatus: <T = unknown>(auth?: AuthContext) =>
+    callOrchestratedStep<T>('stock.history.status.requested', 'stockHistoryStatus', {}, auth),
+  scheduleStockHistory: <T = unknown>(hour: number, auth?: AuthContext) =>
+    callOrchestratedStep<T>('stock.history.schedule.requested', 'stockHistorySchedule', { hour }, auth),
   products: <T = unknown>(payload: ApiPayload = {}, auth?: AuthContext) =>
     callApi<T>('catalog.requested', payload, auth),
   login: <T = unknown>(payload: ApiPayload) => callApi<T>('auth.login', payload),

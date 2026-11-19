@@ -8,7 +8,8 @@
  * execute-as-owner, no Google Cloud, free). To switch to the service-account
  * REST path (Option B, per-user concurrency) set `Repo.adapter = SheetsAdapter`;
  * to migrate the database, implement a new adapter with the same method surface
- * (getValues / appendRows / updateValues / clearRange) and set `Repo.adapter`.
+ * (getValues / getValuesFromEnd / ensureTable / appendRows / updateValues /
+ * clearRange) and set `Repo.adapter`.
  *
  * Methods are collection-oriented and work with row OBJECTS keyed by the sheet's
  * header row, so callers don't depend on column order.
@@ -56,6 +57,85 @@ var Repo = {
   /** Convenience: just the row objects for a collection. */
   readRows: function (collection) {
     return this.readTable(collection).rows;
+  },
+
+  /**
+   * Read a window of data rows counted back from the end of a collection.
+   * SpreadsheetAppAdapter serves this without reading older order rows.
+   * @return {{ headers: string[], rows: Object[], startRow: number, totalRows: number }}
+   */
+  readRowsFromEnd: function (collection, offset, count, anchorTotalRows) {
+    var name = this._name(collection);
+    var adapter = this._adapter();
+    var result;
+    if (typeof adapter.getValuesFromEnd === 'function') {
+      result = adapter.getValuesFromEnd(name, offset, count, anchorTotalRows);
+    } else {
+      var values = adapter.getValues(name);
+      var headers = values.length ? values[0].map(function (h) {
+        return (h == null ? '' : String(h)).trim();
+      }) : [];
+      var availableRows = Math.max(0, values.length - 1);
+      var totalRows = anchorTotalRows === undefined
+        ? availableRows
+        : Math.min(availableRows, Math.max(0, Number(anchorTotalRows) || 0));
+      var end = Math.max(0, totalRows - Math.max(0, Number(offset) || 0));
+      var start = Math.max(0, end - Math.max(0, Number(count) || 0));
+      result = {
+        headers: headers,
+        rows: values.slice(start + 1, end + 1),
+        startRow: start + 2,
+        totalRows: totalRows
+      };
+    }
+
+    return {
+      headers: result.headers || [],
+      rows: (result.rows || []).map(function (row) {
+        return Repo._rowToObject_(result.headers || [], row);
+      }),
+      startRow: result.startRow || 2,
+      totalRows: result.totalRows || 0
+    };
+  },
+
+  /** Ensure a collection exists with the supplied header row. */
+  ensureTable: function (collection, headers) {
+    var adapter = this._adapter();
+    if (typeof adapter.ensureTable !== 'function') {
+      throw new Error('Repo: active adapter cannot ensure tables.');
+    }
+    return adapter.ensureTable(this._name(collection), headers);
+  },
+
+  /**
+   * Replace collection data rows while retaining the existing header row.
+   * Callers coordinating read-modify-write updates must hold the appropriate lock.
+   */
+  replaceRows: function (collection, objects) {
+    var name = this._name(collection);
+    var table = this.readTable(collection);
+    if (!table.headers.length) {
+      throw new Error('Repo.replaceRows: collection "' + collection + '" has no header row.');
+    }
+    var list = Array.isArray(objects) ? objects : [];
+    var values = list.map(function (obj) {
+      return table.headers.map(function (header) {
+        var value = obj[header];
+        return value == null ? '' : value;
+      });
+    });
+    var lastColumn = table.headers.length;
+    var columnName = '';
+    while (lastColumn > 0) {
+      var remainder = (lastColumn - 1) % 26;
+      columnName = String.fromCharCode(65 + remainder) + columnName;
+      lastColumn = Math.floor((lastColumn - 1) / 26);
+    }
+    var adapter = this._adapter();
+    adapter.clearRange(name + '!A2:' + columnName);
+    if (values.length) adapter.appendRows(name, values);
+    return { replaced: values.length };
   },
 
   /**

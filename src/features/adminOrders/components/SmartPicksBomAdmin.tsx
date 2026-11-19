@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { fmtDateTime } from '@/lib/dates'
+import { fmtDateOnly, fmtDateTime } from '@/lib/dates'
 import type { AuthContext } from '@/services/api'
 import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Select, Stats, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
@@ -13,8 +13,11 @@ import {
   removeSmartPicks,
   runCookAlertSweep,
   scheduleSmartPicks,
+  fetchStockHistoryJobInfo,
+  scheduleStockHistoryJob,
   type BomSummary,
   type CookAlertStatus,
+  type StockHistoryJobInfo,
   type SmartPicksInfo,
   type SweepResult,
 } from '../api'
@@ -27,6 +30,7 @@ export function AutomationAdmin({ auth }: { auth: AuthContext }) {
     <>
       <CookAlertsAdmin auth={auth} />
       <SmartPicksAdmin auth={auth} />
+      <StockHistoryAdmin auth={auth} />
     </>
   )
 }
@@ -199,6 +203,88 @@ export function SmartPicksAdmin({ auth }: { auth: AuthContext }) {
           </Button>
           <Button disabled={busy} onClick={() => run(() => refreshSmartPicksNow(auth), (d) => (d as { message?: string })?.message ?? t('adm.refreshed'))}>
             {busy ? t('common.loading') : `🔄 ${t('adm.refreshNow')}`}
+          </Button>
+        </div>
+      </FormRow>
+    </Panel>
+  )
+}
+
+/** Daily Stock_History snapshot scheduling. */
+export function StockHistoryAdmin({ auth }: { auth: AuthContext }) {
+  const { t } = useI18n()
+  const [info, setInfo] = useState<StockHistoryJobInfo | null>(null)
+  const [hour, setHour] = useState('0')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<Msg | null>(null)
+
+  const load = useCallback(async () => {
+    const r = await fetchStockHistoryJobInfo(auth)
+    if (!r.success || !r.data) {
+      setMsg({ tone: 'error', text: r.error ?? '' })
+      return
+    }
+    setInfo(r.data)
+    if (r.data.scheduleHour != null) setHour(String(r.data.scheduleHour))
+  }, [auth])
+
+  useEffect(() => {
+    let active = true
+    fetchStockHistoryJobInfo(auth).then((r) => {
+      if (!active) return
+      if (!r.success || !r.data) {
+        setMsg({ tone: 'error', text: r.error ?? '' })
+        return
+      }
+      setInfo(r.data)
+      if (r.data.scheduleHour != null) setHour(String(r.data.scheduleHour))
+    })
+    return () => {
+      active = false
+    }
+  }, [auth])
+
+  const schedule = async () => {
+    setBusy(true)
+    setMsg(null)
+    const r = await scheduleStockHistoryJob(Number(hour), auth)
+    setBusy(false)
+    if (!r.success || !r.data) {
+      setMsg({ tone: 'error', text: r.error ?? '' })
+      return
+    }
+    setMsg({ tone: 'info', text: r.data.message ?? t('adm.stockHistoryScheduled') })
+    await load()
+  }
+
+  return (
+    <Panel title={`📦 ${t('adm.stockHistory')}`}>
+      {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
+      <p className="muted">{t('adm.stockHistoryHelp')}</p>
+      {info && (
+        <Stats
+          items={[
+            { label: t('adm.trigger'), value: info.triggerActive ? t('adm.active') : t('adm.inactive'), tone: info.triggerActive ? 'ok' : 'bad' },
+            { label: t('adm.hour'), value: info.scheduleHour == null ? '—' : `${String(info.scheduleHour).padStart(2, '0')}:00` },
+            { label: t('adm.lastUpdated'), value: info.lastRun ? fmtDateTime(info.lastRun) : '—' },
+            { label: t('adm.lastBusinessDate'), value: info.lastBusinessDate ? fmtDateOnly(info.lastBusinessDate) : '—' },
+            { label: t('adm.timeZone'), value: info.timeZone || '—' },
+          ]}
+        />
+      )}
+      <FormRow>
+        <Field label={t('adm.hour')}>
+          <Select value={hour} onChange={(e) => setHour(e.target.value)}>
+            {Array.from({ length: 24 }, (_, h) => (
+              <option key={h} value={h}>
+                {String(h).padStart(2, '0')}:00
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <div className="actions" style={{ alignSelf: 'end' }}>
+          <Button disabled={busy} onClick={schedule}>
+            {busy ? t('common.loading') : `⏰ ${t('adm.schedule')}`}
           </Button>
         </div>
       </FormRow>

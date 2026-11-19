@@ -263,48 +263,28 @@ function getInventoryConsumptionHistory(deviceId, username) {
 }
 
 function getProductNamesByCode() {
-  try {
-    const sheet = getGlobalSpreadsheet().getSheetByName(SHEETS.PRODUCTS);
-    if (!sheet) {
-      return {};
-    }
-
-    const data = sheet.getDataRange().getValues();
-    if (data.length < 2) {
-      return {};
-    }
-
-    const headers = data[0];
-    const nameIdx = headers.findIndex(h => /name/i.test(h));
-    const categoryIdx = headers.findIndex(h => /category/i.test(h));
-    const productCodeIdx = headers.findIndex(h => /product.*code|code/i.test(h));
-
-    const productNames = {};
-    
-    data.slice(1).forEach(row => {
-      const name = nameIdx >= 0 ? row[nameIdx] : '';
-      const category = categoryIdx >= 0 ? row[categoryIdx] : '';
-      let productCode = productCodeIdx >= 0 ? row[productCodeIdx] : '';
-
-      // Generate product code if not available
-      if (!productCode && name) {
-        productCode = generateProductCode({
-          name: name,
-          category: category
-        });
-      }
-
-      if (productCode && name) {
-        productNames[productCode] = name;
-      }
+  var productNames = {};
+  Repo.readRows('PRODUCTS').forEach(function (row) {
+    var name = '';
+    var category = '';
+    var productCode = '';
+    Object.keys(row).forEach(function (key) {
+      if (/^(product\s*)?name$/i.test(key.trim())) name = row[key] || name;
+      else if (/^category$/i.test(key.trim())) category = row[key] || category;
+      else if (/^(product\s*code|code)$/i.test(key.trim())) productCode = row[key] || productCode;
     });
 
-    return productNames;
-
-  } catch (error) {
-    Logger.log("Error getting product names: " + error.toString());
-    return {};
-  }
+    if (!productCode && name) {
+      productCode = generateProductCode({ name: name, category: category });
+    }
+    if (productCode && name) {
+      var codeKey = typeof normalizeProductCodeKey_ === 'function'
+        ? normalizeProductCodeKey_(productCode)
+        : String(productCode).trim().toUpperCase();
+      productNames[codeKey] = name;
+    }
+  });
+  return productNames;
 }
 
 function shouldPreferBottomUpOrderScan_(businessDateStr) {

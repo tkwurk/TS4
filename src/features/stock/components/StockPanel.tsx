@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fmtDateOnly } from '@/lib/dates'
-import { callSecure } from '@/services/api'
+import { api } from '@/services/api'
 import type { AuthContext } from '@/services/api'
 import { Badge, Button, DataTable, Field, FormRow, Notice, Panel, Stats, TextInput } from '@/components/ui'
 import { useI18n } from '@/i18n'
@@ -38,11 +38,13 @@ export function StockPanel({ auth }: { auth: AuthContext }) {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const r = await callSecure<StockResult>('getStockTotalsSecure', { outlet: auth.outlet }, auth)
+    const r = await api.stockReport<StockResult>(auth)
     setLoading(false)
-    if (!r.ok) return setError(r.error)
-    const d = r.data as unknown as { items?: StockItem[] } & StockResult
-    setData(d?.items ? d : null)
+    if (!r.success || !r.data) {
+      setData(null)
+      return setError(r.error || 'Stock report is unavailable.')
+    }
+    setData(r.data)
   }, [auth])
 
   useEffect(() => {

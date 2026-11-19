@@ -42,6 +42,62 @@ var SheetsAdapter = {
     return out.values || [];
   },
 
+  getValuesFromEnd: function (name, offset, count, anchorTotalRows) {
+    var values = this.getValues(name);
+    if (!values.length) {
+      return { headers: [], rows: [], startRow: 2, totalRows: 0 };
+    }
+
+    var headers = values[0].map(function (h) { return (h == null ? '' : String(h)).trim(); });
+    var availableRows = Math.max(0, values.length - 1);
+    var totalRows = anchorTotalRows === undefined
+      ? availableRows
+      : Math.min(availableRows, Math.max(0, Number(anchorTotalRows) || 0));
+    var endIndex = Math.max(0, totalRows - Math.max(0, Number(offset) || 0));
+    var startIndex = Math.max(0, endIndex - Math.max(0, Number(count) || 0));
+    return {
+      headers: headers,
+      rows: values.slice(startIndex + 1, endIndex + 1),
+      startRow: startIndex + 2,
+      totalRows: totalRows
+    };
+  },
+
+  ensureTable: function (name, headers) {
+    var base = this._base();
+    var metadata = this._fetch(base + '?fields=' + encodeURIComponent('sheets.properties.title'), { method: 'get' });
+    var exists = (metadata.sheets || []).some(function (sheet) {
+      return sheet.properties && sheet.properties.title === name;
+    });
+    if (!exists) {
+      this._fetch(base + ':batchUpdate', {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify({ requests: [{ addSheet: { properties: { title: name } } }] })
+      });
+    }
+
+    var current = this.getValues(name);
+    if (!current.length) {
+      var endColumn = headers.length;
+      var columnName = '';
+      while (endColumn > 0) {
+        var remainder = (endColumn - 1) % 26;
+        columnName = String.fromCharCode(65 + remainder) + columnName;
+        endColumn = Math.floor((endColumn - 1) / 26);
+      }
+      this.updateValues(name + '!A1:' + columnName + '1', [headers]);
+      return true;
+    }
+
+    for (var i = 0; i < headers.length; i++) {
+      if (String(current[0][i] || '').trim() !== String(headers[i] || '').trim()) {
+        throw new Error('SheetsAdapter.ensureTable: header mismatch in ' + name);
+      }
+    }
+    return true;
+  },
+
   /** Append rows to the table anchored at `range`. */
   appendRows: function (range, rows) {
     if (!rows || !rows.length) return { updates: { updatedRows: 0 } };

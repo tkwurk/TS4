@@ -49,6 +49,14 @@ function normalizeProductCodeKey_(code) {
   return (code || '').toString().trim().toUpperCase().replace(/\s+/g, '_');
 }
 
+function _readRepoValues_(collection) {
+  var table = Repo.readTable(collection);
+  if (!table.headers.length) return [];
+  return [table.headers].concat(table.rows.map(function (row) {
+    return table.headers.map(function (header) { return row[header]; });
+  }));
+}
+
 /**
  * Index Products sheet codes, generated codes (category_name), and names.
  */
@@ -56,12 +64,11 @@ function loadProductCodeIndex_() {
   var byCode = {};
   var byGenerated = {};
   var byName = {};
-  var sheet = getGlobalSpreadsheet().getSheetByName(SHEETS.PRODUCTS);
-  if (!sheet || sheet.getLastRow() < 2) {
+  var data = _readRepoValues_('PRODUCTS');
+  if (data.length < 2) {
     return { byCode: byCode, byGenerated: byGenerated, byName: byName };
   }
 
-  var data = sheet.getDataRange().getValues();
   var headers = data[0];
   var nameIdx = headers.findIndex(function(h) { return h && /^name$/i.test(h.toString()); });
   var catIdx = headers.findIndex(function(h) { return h && /category/i.test(h.toString()); });
@@ -210,16 +217,14 @@ function parseBomItemQuantity_(raw) {
  * @returns {{ byUnitProduct: Object.<string, Array>, lines: Array, totalLines: number }}
  */
 function loadActiveBomRecipes_() {
-  ensureBomSheet_();
-  var sheet = getGlobalSpreadsheet().getSheetByName(SHEETS.BOM);
   var byUnitProduct = {};
   var lines = [];
   var skipped = [];
-  if (!sheet || sheet.getLastRow() < 2) {
+  var data = _readRepoValues_('BOM');
+  if (data.length < 2) {
     return { byUnitProduct: byUnitProduct, byUnitLookup: {}, lines: lines, totalLines: 0, skipped: skipped };
   }
 
-  var data = sheet.getDataRange().getValues();
   var headers = data[0];
   var bomIdIdx = headers.findIndex(function(h) { return h && /bom\s*id/i.test(h.toString()); });
   var bomItemIdx = headers.findIndex(function(h) { return h && /bom\s*item\s*id/i.test(h.toString()); });
@@ -391,18 +396,16 @@ function ensureBomUsageSheet_() {
  * @returns {{ byBaseAndFlavor: Object, baseCodes: Object, flavorCodes: Object, lines: Array, skipped: Array }}
  */
 function loadActiveBomUsageMatrix_() {
-  ensureBomUsageSheet_();
-  var sheet = getGlobalSpreadsheet().getSheetByName(SHEETS.BOM_USAGE);
   var byBaseAndFlavor = {};
   var baseCodes = {};
   var flavorCodes = {};
   var lines = [];
   var skipped = [];
-  if (!sheet || sheet.getLastRow() < 2) {
+  var data = _readRepoValues_('BOM_USAGE');
+  if (data.length < 2) {
     return { byBaseAndFlavor: byBaseAndFlavor, baseCodes: baseCodes, flavorCodes: flavorCodes, lines: lines, skipped: skipped };
   }
 
-  var data = sheet.getDataRange().getValues();
   var headers = data[0];
   var baseIdx = headers.findIndex(function(h) { return h && /base\s*unit\s*product\s*code/i.test(h.toString()); });
   var flavorIdx = headers.findIndex(function(h) { return h && /flavor\s*unit\s*product\s*code/i.test(h.toString()); });
@@ -456,9 +459,8 @@ function loadActiveBomUsageMatrix_() {
 
 function loadUnitsForSellingByCode_() {
   var map = {};
-  var sheet = getGlobalSpreadsheet().getSheetByName(SHEETS.PRODUCTS);
-  if (!sheet || sheet.getLastRow() < 2) return map;
-  var data = sheet.getDataRange().getValues();
+  var data = _readRepoValues_('PRODUCTS');
+  if (data.length < 2) return map;
   var headers = data[0];
   var codeIdx = headers.findIndex(function(h) { return h && /product.*code|^code$/i.test(h.toString()); });
   var ufsIdx = headers.findIndex(function(h) { return h && /units\s*for\s*selling|unitsforselling/i.test(h.toString()); });
@@ -660,18 +662,18 @@ function readOrderRowsForDate_(businessDateStr, outlet, options) {
   options = options || {};
   var soldMap = {};
   var groups = {};
-  var ordersSheet = getGlobalSpreadsheet().getSheetByName(SHEETS.ORDERS);
-  if (!ordersSheet) {
+  var batchSize = options.batchSize || (typeof CONSUMPTION_ORDER_BATCH_SIZE !== 'undefined'
+    ? CONSUMPTION_ORDER_BATCH_SIZE
+    : 500);
+  var preferBottomUp = options.preferBottomUp !== false;
+  var firstBatch = preferBottomUp ? Repo.readRowsFromEnd('ORDERS', 0, batchSize) : null;
+  var fullOrderData = preferBottomUp ? null : _readRepoValues_('ORDERS');
+  var headerRow = preferBottomUp ? firstBatch.headers : (fullOrderData[0] || []);
+  var totalRows = preferBottomUp ? firstBatch.totalRows : Math.max(0, fullOrderData.length - 1);
+  if (!headerRow.length || !totalRows) {
     return { soldMap: soldMap, groups: [], rowsScanned: 0, scanMode: 'empty' };
   }
 
-  var lastRow = ordersSheet.getLastRow();
-  if (lastRow < 2) {
-    return { soldMap: soldMap, groups: [], rowsScanned: 0, scanMode: 'empty' };
-  }
-
-  var lastCol = Math.max(ordersSheet.getLastColumn(), 1);
-  var headerRow = ordersSheet.getRange(1, 1, 1, lastCol).getValues()[0];
   var dateIdx = headerRow.findIndex(function(h) { return h && /timestamp|date/i.test(h.toString()); });
   var orderNumIdx = headerRow.findIndex(function(h) { return h && /order\s*number/i.test(h.toString()); });
   var codeIdx = headerRow.findIndex(function(h) { return h && /product.*code|^code$/i.test(h.toString()); });
@@ -682,10 +684,6 @@ function readOrderRowsForDate_(businessDateStr, outlet, options) {
     ? getCachedProductCodeIndex_()
     : loadProductCodeIndex_());
 
-  var preferBottomUp = options.preferBottomUp !== false;
-  var batchSize = options.batchSize || (typeof CONSUMPTION_ORDER_BATCH_SIZE !== 'undefined'
-    ? CONSUMPTION_ORDER_BATCH_SIZE
-    : 500);
   var rowsScanned = 0;
   var scanMode = preferBottomUp ? 'bottom_up' : 'full';
 
@@ -730,14 +728,18 @@ function readOrderRowsForDate_(businessDateStr, outlet, options) {
   }
 
   if (preferBottomUp) {
-    var r = lastRow;
-    while (r >= 2) {
-      var startRow = Math.max(2, r - batchSize + 1);
-      var batch = ordersSheet.getRange(startRow, 1, r - startRow + 1, lastCol).getValues();
+    var offset = 0;
+    while (offset < firstBatch.totalRows) {
+      var batchInfo = offset === 0
+        ? firstBatch
+        : Repo.readRowsFromEnd('ORDERS', offset, batchSize, firstBatch.totalRows);
+      var batch = batchInfo.rows.map(function (row) {
+        return headerRow.map(function (header) { return row[header]; });
+      });
       for (var i = batch.length - 1; i >= 0; i--) {
         rowsScanned++;
         var row = batch[i];
-        var rowNum = startRow + i;
+        var rowNum = batchInfo.startRow + i;
         var dateKey = rowDateKey_(row);
         if (!dateKey) continue;
         if (dateKey < businessDateStr) {
@@ -752,14 +754,13 @@ function readOrderRowsForDate_(businessDateStr, outlet, options) {
         if (!rowMatchesOutlet_(row)) continue;
         processMatchingRow(row, rowNum);
       }
-      r = startRow - 1;
+      offset += batch.length;
     }
   } else {
     scanMode = 'full';
-    var orderData = ordersSheet.getDataRange().getValues();
-    for (var fr = 1; fr < orderData.length; fr++) {
+    for (var fr = 1; fr < fullOrderData.length; fr++) {
       rowsScanned++;
-      var fullRow = orderData[fr];
+      var fullRow = fullOrderData[fr];
       if (!rowMatchesDate_(fullRow)) continue;
       if (!rowMatchesOutlet_(fullRow)) continue;
       processMatchingRow(fullRow, fr + 1);
@@ -786,18 +787,12 @@ function readAllOrderRowsForOutlet_(outlet, options) {
   options = options || {};
   var soldMap = {};
   var groups = {};
-  var ordersSheet = getGlobalSpreadsheet().getSheetByName(SHEETS.ORDERS);
-  if (!ordersSheet) {
+  var orderData = _readRepoValues_('ORDERS');
+  if (orderData.length < 2) {
     return { soldMap: soldMap, groups: [], rowsScanned: 0, scanMode: 'empty' };
   }
 
-  var lastRow = ordersSheet.getLastRow();
-  if (lastRow < 2) {
-    return { soldMap: soldMap, groups: [], rowsScanned: 0, scanMode: 'empty' };
-  }
-
-  var lastCol = Math.max(ordersSheet.getLastColumn(), 1);
-  var headerRow = ordersSheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var headerRow = orderData[0];
   var orderNumIdx = headerRow.findIndex(function(h) { return h && /order\s*number/i.test(h.toString()); });
   var codeIdx = headerRow.findIndex(function(h) { return h && /product.*code|^code$/i.test(h.toString()); });
   var nameIdx = headerRow.findIndex(function(h) { return h && /product.*name|^name$/i.test(h.toString()); });
@@ -828,12 +823,11 @@ function readAllOrderRowsForOutlet_(outlet, options) {
     return String(row[outletIdx] || '').trim() === String(outlet).trim();
   }
 
-  var orderData = ordersSheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
-  for (var fr = 0; fr < orderData.length; fr++) {
+  for (var fr = 1; fr < orderData.length; fr++) {
     rowsScanned++;
     var fullRow = orderData[fr];
     if (!rowMatchesOutlet_(fullRow)) continue;
-    processMatchingRow(fullRow, fr + 2);
+    processMatchingRow(fullRow, fr + 1);
   }
 
   return {
@@ -852,18 +846,12 @@ function readOrderSoldMapThroughDateForOutlet_(outlet, throughDateStr, options) 
   options = options || {};
   var soldMap = {};
   var groups = {};
-  var ordersSheet = getGlobalSpreadsheet().getSheetByName(SHEETS.ORDERS);
-  if (!ordersSheet) {
+  var orderData = _readRepoValues_('ORDERS');
+  if (orderData.length < 2) {
     return { soldMap: soldMap, groups: [], rowsScanned: 0, scanMode: 'empty' };
   }
 
-  var lastRow = ordersSheet.getLastRow();
-  if (lastRow < 2) {
-    return { soldMap: soldMap, groups: [], rowsScanned: 0, scanMode: 'empty' };
-  }
-
-  var lastCol = Math.max(ordersSheet.getLastColumn(), 1);
-  var headerRow = ordersSheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var headerRow = orderData[0];
   var dateIdx = headerRow.findIndex(function(h) { return h && /timestamp|date/i.test(h.toString()); });
   var orderNumIdx = headerRow.findIndex(function(h) { return h && /order\s*number/i.test(h.toString()); });
   var codeIdx = headerRow.findIndex(function(h) { return h && /product.*code|^code$/i.test(h.toString()); });
@@ -888,7 +876,9 @@ function readOrderSoldMapThroughDateForOutlet_(outlet, throughDateStr, options) 
     if (dateIdx < 0 || !row[dateIdx]) return null;
     var orderDate = row[dateIdx] instanceof Date ? row[dateIdx] : new Date(row[dateIdx]);
     if (isNaN(orderDate.getTime())) return null;
-    return formatDateForComparison(orderDate);
+    return typeof getAppDateKey_ === 'function'
+      ? getAppDateKey_(orderDate)
+      : formatDateForComparison(orderDate);
   }
 
   function processMatchingRow(row, rowNum) {
@@ -903,14 +893,13 @@ function readOrderSoldMapThroughDateForOutlet_(outlet, throughDateStr, options) 
     groups[gKey].lines.push({ code: soldCode, qty: qty });
   }
 
-  var orderData = ordersSheet.getRange(2, 1, lastRow, lastCol).getValues();
-  for (var fr = 0; fr < orderData.length; fr++) {
+  for (var fr = 1; fr < orderData.length; fr++) {
     rowsScanned++;
     var fullRow = orderData[fr];
     if (!rowMatchesOutlet_(fullRow)) continue;
     var dateKey = rowDateKey_(fullRow);
     if (!dateKey || !throughKey || dateKey > throughKey) continue;
-    processMatchingRow(fullRow, fr + 2);
+    processMatchingRow(fullRow, fr + 1);
   }
 
   return {
@@ -1025,27 +1014,29 @@ function computeLifetimeBomConsumptionForOutlet_(outlet, options) {
  */
 function getDistinctOutletsForConsumption_() {
   var outletSet = {};
-  try {
-    var configured = getOutlets();
-    configured.forEach(function(o) {
-      var key = (o.name || o.id || '').toString().trim();
-      if (key) outletSet[key] = true;
+  Repo.readRows('OUTLETS').forEach(function (row) {
+    var keys = Object.keys(row);
+    var outletName = '';
+    var outletId = '';
+    keys.forEach(function (key) {
+      if (/name|outlet/i.test(key.trim())) outletName = outletName || row[key];
+      else if (/id/i.test(key.trim())) outletId = outletId || row[key];
     });
-  } catch (e) {
-    Logger.log('getDistinctOutletsForConsumption_ outlets sheet: ' + e.message);
-  }
+    var name = String(outletName || outletId || '').trim();
+    if (name) outletSet[name] = true;
+  });
 
-  var ordersSheet = getGlobalSpreadsheet().getSheetByName(SHEETS.ORDERS);
-  if (ordersSheet && ordersSheet.getLastRow() > 1) {
-    var data = ordersSheet.getDataRange().getValues();
-    var outletIdx = data[0].findIndex(function(h) { return h && /outlet/i.test(h.toString()); });
-    if (outletIdx >= 0) {
-      for (var i = 1; i < data.length; i++) {
-        var o = (data[i][outletIdx] || '').toString().trim();
-        if (o) outletSet[o] = true;
+  ['ORDERS', 'PURCHASES', 'INVENTORY_CONSUMPTION'].forEach(function (collection) {
+    Repo.readRows(collection).forEach(function (row) {
+      var keys = Object.keys(row);
+      for (var i = 0; i < keys.length; i++) {
+        if (!/^outlet$/i.test(keys[i].trim())) continue;
+        var outlet = String(row[keys[i]] || '').trim();
+        if (outlet) outletSet[outlet] = true;
+        break;
       }
-    }
-  }
+    });
+  });
 
   return Object.keys(outletSet).sort();
 }
