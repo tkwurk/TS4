@@ -105,7 +105,7 @@ export function StockPanel({ auth }: { auth: AuthContext }) {
           items={[
             { label: t('stock.products'), value: fmtNum(data.items.length) },
             { label: t('stock.outOfStock'), value: fmtNum(low), tone: low ? 'bad' : 'ok' },
-            { label: t('stock.asOf'), value: fmtDate(data.historyAsOfDate || data.todayDate) },
+            { label: t('stock.asOf'), value: fmtDate(data.todayDate || data.historyAsOfDate) },
           ]}
         />
       )}
