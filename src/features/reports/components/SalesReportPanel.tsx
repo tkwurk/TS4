@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { addDays, fmtTimeOnly, localDate } from '@/lib/dates'
 import type { AuthContext } from '@/services/api'
 import { Button, DataTable, Field, FormRow, Notice, Panel, Stats, SubTabs, TextInput } from '@/components/ui'
@@ -17,6 +17,7 @@ export function SalesReportPanel({ auth }: { auth: AuthContext }) {
   const [lines, setLines] = useState<OrderLine[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [productSearch, setProductSearch] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -45,6 +46,24 @@ export function SalesReportPanel({ auth }: { auth: AuthContext }) {
     }
     return rows.sort((a, b) => b.total - a.total)
   }, [summary])
+
+  /** Display grouping only — categories by sales desc, products by sales desc. */
+  const categoryGroups = useMemo(() => {
+    const q = productSearch.trim().toLowerCase()
+    const visible = q
+      ? products.filter((p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q))
+      : products
+    const groups = new Map<string, { category: string; rows: typeof visible; qty: number; total: number }>()
+    for (const row of visible) {
+      const category = row.category || t('stock.uncategorized')
+      let group = groups.get(category)
+      if (!group) groups.set(category, (group = { category, rows: [], qty: 0, total: 0 }))
+      group.rows.push(row)
+      group.qty += row.qty
+      group.total += row.total
+    }
+    return Array.from(groups.values()).sort((a, b) => b.total - a.total)
+  }, [products, productSearch, t])
 
   const shift = (days: number) => setDate(addDays(date, days))
 
@@ -88,20 +107,49 @@ export function SalesReportPanel({ auth }: { auth: AuthContext }) {
       />
 
       {view === 'products' && (
-        <DataTable
-          rows={products as unknown as Record<string, unknown>[]}
-          rowKey={(r) => `${r.category}:${r.name}`}
-          empty={loading ? t('common.loading') : t('sales.none')}
-          defaultSort={{ key: 'category', dir: 'asc' }}
-          filterable
-          filterPlaceholder={t('sales.filter')}
-          columns={[
-            { key: 'name', label: t('purch.product'), sortable: true },
-            { key: 'category', label: t('inv.category'), sortable: true },
-            { key: 'qty', label: t('purch.qty'), align: 'right', sortable: true, render: (r) => fmtNum(Number(r.qty) || 0) },
-            { key: 'total', label: t('inv.total'), align: 'right', sortable: true, render: (r) => fmtMoney(Number(r.total) || 0) },
-          ]}
-        />
+        <div>
+          <input
+            className="table-filter"
+            type="search"
+            value={productSearch}
+            placeholder={t('sales.filter')}
+            onChange={(e) => setProductSearch(e.target.value)}
+          />
+          {categoryGroups.length === 0 ? (
+            <p className="muted">{loading ? t('common.loading') : t('sales.none')}</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>{t('purch.product')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('purch.qty')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('inv.total')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categoryGroups.map((group) => (
+                    <Fragment key={group.category}>
+                      <tr>
+                        <td colSpan={3} className="table-group-header">
+                          {group.category}
+                          <span className="table-group-sub"> — {fmtMoney(group.total)} · {fmtNum(group.qty)}</span>
+                        </td>
+                      </tr>
+                      {group.rows.map((r) => (
+                        <tr key={`${group.category}:${r.name}`}>
+                          <td>{r.name}</td>
+                          <td style={{ textAlign: 'right' }}>{fmtNum(r.qty)}</td>
+                          <td style={{ textAlign: 'right' }}>{fmtMoney(r.total)}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
       {view === 'lines' && (
         <DataTable

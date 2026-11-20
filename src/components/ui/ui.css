@@ -219,6 +219,20 @@
   font-weight: 600;
 }
 
+/* Full-width centered group separator row (e.g. sales by category). */
+.data-table td.table-group-header {
+  text-align: center;
+  font-weight: 700;
+  background: var(--accent-bg);
+  color: var(--text-h);
+  border-top: 2px solid var(--accent-border);
+}
+
+.table-group-header .table-group-sub {
+  font-weight: 500;
+  color: var(--text);
+}
+
 .ui-form-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
